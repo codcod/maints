@@ -1,0 +1,11 @@
+# Binary
+/triage
+
+# Environment
+.env
+
+# Triage workspace output
+triaged-maints/
+
+# macOS
+.DS_Store
