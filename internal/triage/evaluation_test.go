@@ -250,14 +250,14 @@ func TestRenderEvaluationMarkdown_Structure(t *testing.T) {
 
 	checks := []string{
 		"## Checklist Evaluation",
-		"### 1. Priority — ✅ Complete",
+		"### 1. Priority — Complete",
 		"> Priority is Major.",
 		"Default priority.",
-		"### 2. Component — ❌ Missing",
+		"### 2. Component — Missing",
 		"Nothing listed.",
 		"### 3. Environment — N/A",
 		"## Summary of Gaps",
-		"| 2 | Component | ❌ Missing |",
+		"| 2 | Component | Missing |",
 		"## Overall Verdict: **FAIL**",
 		"Component is missing.",
 	}
@@ -298,10 +298,10 @@ func TestRenderEvaluationMarkdown_PartialInGapTable(t *testing.T) {
 
 	out := renderEvaluationMarkdown(e)
 
-	if !strings.Contains(out, "⚠️ Partial") {
+	if !strings.Contains(out, "Partial") {
 		t.Error("expected partial status label in output")
 	}
-	if !strings.Contains(out, "| 7 | Expected vs Actual | ⚠️ Partial |") {
+	if !strings.Contains(out, "| 7 | Expected vs Actual | Partial |") {
 		t.Errorf("expected partial item in gap table\nfull output:\n%s", out)
 	}
 }

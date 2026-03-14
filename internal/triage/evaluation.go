@@ -176,11 +176,11 @@ func renderEvaluationMarkdown(e *Evaluation) string {
 func statusLabel(s ItemStatus) string {
 	switch s {
 	case StatusComplete:
-		return "✅ Complete"
+		return "Complete"
 	case StatusPartial:
-		return "⚠️ Partial"
+		return "Partial"
 	case StatusMissing:
-		return "❌ Missing"
+		return "Missing"
 	case StatusNA:
 		return "N/A"
 	default:
