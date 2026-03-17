@@ -22,6 +22,7 @@ const (
 	defaultPromptFile    = "triage-prompt.md"
 	promptKeyPlaceholder = "{{ISSUE_KEY}}"
 	defaultConcurrency   = 5
+	outcomeSchemaVersion = "1"
 )
 
 // Options controls a triage run.
@@ -29,8 +30,7 @@ type Options struct {
 	ChecklistPath string
 	PromptPath    string
 	Model         string
-	OutputFormat  string // "text" or "json"
-	Concurrency   int    // max parallel triageOne calls; 0 uses defaultConcurrency
+	Concurrency   int // max parallel triageOne calls; 0 uses defaultConcurrency
 }
 
 // Result holds the triage outcome for a single issue.
@@ -42,6 +42,33 @@ type Result struct {
 	Evaluation *Evaluation `json:"evaluation,omitempty"`
 	Warnings   []string    `json:"warnings,omitempty"`
 	Error      string      `json:"error,omitempty"`
+}
+
+// TriageOutcomeBatch is the top-level JSON envelope written to stdout.
+// It wraps all per-issue outcomes in a single document so that concurrent
+// runs of multiple issues produce one well-formed JSON object.
+type TriageOutcomeBatch struct {
+	SchemaVersion string          `json:"schema_version"`
+	Issues        []TriageOutcome `json:"issues"`
+}
+
+// TriageOutcome is the machine-readable result written to stdout after each
+// triage run. It is the JSON equivalent of the human-readable Markdown report
+// and contains the same information in both outputs.
+type TriageOutcome struct {
+	IssueKey          string          `json:"issue_key"`
+	Summary           string          `json:"summary"` // Jira issue title
+	TriagedAt         time.Time       `json:"triaged_at"`
+	Verdict           string          `json:"verdict,omitempty"` // VerdictPass or VerdictFail
+	ReviewRequired    bool            `json:"review_required"`
+	Decision          Decision        `json:"decision"`
+	Confidence        float64         `json:"confidence"`
+	Items             []ChecklistItem `json:"items,omitempty"`
+	EvaluationSummary string          `json:"evaluation_summary,omitempty"` // prose description of gaps
+	Questions         []string        `json:"questions,omitempty"`
+	RejectionReason   string          `json:"rejection_reason,omitempty"`
+	Warnings          []string        `json:"warnings,omitempty"`
+	Error             string          `json:"error,omitempty"`
 }
 
 // triageDeps groups the resolved dependencies shared across triageOne calls.
@@ -132,14 +159,8 @@ func resolvePrompt(explicit string) (string, error) {
 	return resolveConfigFile(explicit, defaultPromptFile)
 }
 
-// Run triages one or more Jira issues and writes results to w.
+// Run triages one or more Jira issues and writes machine-readable JSON outcomes to w.
 func Run(ctx context.Context, issueKeys []string, cfg *config.Config, opts Options, w io.Writer) error {
-	switch opts.OutputFormat {
-	case "text", "json", "":
-	default:
-		return fmt.Errorf("unsupported output format %q (use text or json)", opts.OutputFormat)
-	}
-
 	checklistPath, err := resolveChecklist(opts.ChecklistPath)
 	if err != nil {
 		return err
@@ -186,15 +207,12 @@ func Run(ctx context.Context, issueKeys []string, cfg *config.Config, opts Optio
 	var mu sync.Mutex
 	results := runConcurrent(keys, concurrency, func(key string) Result {
 		mu.Lock()
-		_, _ = fmt.Fprintf(w, "Triaging %s...\n", key)
+		_, _ = fmt.Fprintf(os.Stderr, "Triaging %s...\n", key)
 		mu.Unlock()
 		return triageOne(ctx, key, deps, opts)
 	})
 
-	for _, result := range results {
-		printResult(w, result, opts.OutputFormat)
-	}
-
+	printResults(w, results)
 	return nil
 }
 
@@ -306,6 +324,13 @@ func writeReport(path string, r Result) error {
 	fw.printf("**Triaged at:** %s\n\n", r.TriagedAt.Format(time.RFC3339))
 	fw.printf("---\n\n")
 	fw.printf("%s\n", r.Report)
+	if len(r.Warnings) > 0 {
+		fw.printf("---\n\n## Validation Warnings\n\n")
+		for _, w := range r.Warnings {
+			fw.printf("- %s\n", w)
+		}
+		fw.printf("\n")
+	}
 	if fw.err != nil {
 		return fw.err
 	}
@@ -351,33 +376,46 @@ func writeIssueMarkdown(path string, issue *jira.Issue) error {
 	return f.Close()
 }
 
-func printResult(w io.Writer, r Result, format string) {
-	if format == "json" {
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(r)
-		return
+// buildOutcome converts a single triage Result into a TriageOutcome.
+func buildOutcome(r Result) TriageOutcome {
+	outcome := TriageOutcome{
+		IssueKey:  r.IssueKey,
+		Summary:   r.Summary,
+		TriagedAt: r.TriagedAt,
+		Warnings:  r.Warnings,
+		Error:     r.Error,
 	}
-
-	fw := &fmtWriter{w: w}
-	fw.printf("\n%s\n", strings.Repeat("─", 60))
-	fw.printf("Issue:   %s\n", r.IssueKey)
-	fw.printf("Summary: %s\n", r.Summary)
-	fw.printf("Triaged: %s\n", r.TriagedAt.Format(time.RFC3339))
-	fw.printf("%s\n\n", strings.Repeat("─", 60))
 
 	if r.Error != "" {
-		fw.printf("ERROR: %s\n\n", r.Error)
-		return
+		outcome.Decision = ""
+	} else if r.Evaluation != nil {
+		outcome.Verdict = r.Evaluation.Verdict
+		outcome.ReviewRequired = r.Evaluation.ReviewRequired
+		outcome.Decision = r.Evaluation.Decision
+		outcome.Confidence = r.Evaluation.Confidence
+		outcome.Items = r.Evaluation.Items
+		outcome.EvaluationSummary = r.Evaluation.Summary
+		outcome.Questions = r.Evaluation.Questions
+		outcome.RejectionReason = r.Evaluation.RejectionReason
+	} else {
+		// Agent returned raw text; cannot determine a structured decision.
+		outcome.Error = "agent output could not be parsed as a structured evaluation"
 	}
 
-	fw.printf("%s\n\n", r.Report)
+	return outcome
+}
 
-	if len(r.Warnings) > 0 {
-		fw.printf("⚠️  Validation warnings:\n")
-		for _, warning := range r.Warnings {
-			fw.printf("  - %s\n", warning)
-		}
-		fw.printf("\n")
+// printResults writes all triage outcomes as a single JSON batch to w.
+func printResults(w io.Writer, results []Result) {
+	batch := TriageOutcomeBatch{
+		SchemaVersion: outcomeSchemaVersion,
+		Issues:        make([]TriageOutcome, len(results)),
 	}
+	for i, r := range results {
+		batch.Issues[i] = buildOutcome(r)
+	}
+
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(batch)
 }

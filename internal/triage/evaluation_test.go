@@ -14,8 +14,11 @@ func TestParseEvaluation_ValidJSON(t *testing.T) {
 			{"id":2,"title":"Component","status":"missing","evidence":"","reasoning":"No component listed."}
 		],
 		"summary": "Component is missing.",
-		"verdict": "FAIL",
-		"review_required": false
+		"verdict": "FAIL_CHECKLIST_COMPLIANCE",
+		"review_required": false,
+		"decision": "request_info",
+		"confidence": 0.8,
+		"questions": ["Which component is affected?"]
 	}`
 
 	e, err := parseEvaluation(raw)
@@ -28,8 +31,8 @@ func TestParseEvaluation_ValidJSON(t *testing.T) {
 	if len(e.Items) != 2 {
 		t.Errorf("Items len = %d, want 2", len(e.Items))
 	}
-	if e.Verdict != "FAIL" {
-		t.Errorf("Verdict = %q, want FAIL", e.Verdict)
+	if e.Verdict != VerdictFail {
+		t.Errorf("Verdict = %q, want %s", e.Verdict, VerdictFail)
 	}
 	if e.Items[0].Status != StatusComplete {
 		t.Errorf("Items[0].Status = %q, want complete", e.Items[0].Status)
@@ -37,11 +40,17 @@ func TestParseEvaluation_ValidJSON(t *testing.T) {
 	if e.Items[1].Status != StatusMissing {
 		t.Errorf("Items[1].Status = %q, want missing", e.Items[1].Status)
 	}
+	if e.Decision != DecisionRequestInfo {
+		t.Errorf("Decision = %q, want %q", e.Decision, DecisionRequestInfo)
+	}
+	if e.Confidence != 0.8 {
+		t.Errorf("Confidence = %g, want 0.8", e.Confidence)
+	}
 }
 
 func TestParseEvaluation_JSONInCodeFence(t *testing.T) {
 	raw := "Here is the evaluation:\n\n```json\n" +
-		`{"items":[{"id":1,"title":"Priority","status":"complete","evidence":"Major","reasoning":"ok"}],"summary":"All good.","verdict":"PASS","review_required":false}` +
+		`{"items":[{"id":1,"title":"Priority","status":"complete","evidence":"Major","reasoning":"ok"}],"summary":"All good.","verdict":"PASS_CHECKLIST_COMPLIANCE","review_required":false,"decision":"accept","confidence":0.95}` +
 		"\n```\n\nDone."
 
 	e, err := parseEvaluation(raw)
@@ -51,8 +60,11 @@ func TestParseEvaluation_JSONInCodeFence(t *testing.T) {
 	if e == nil {
 		t.Fatal("parseEvaluation() returned nil for fenced JSON")
 	}
-	if e.Verdict != "PASS" {
-		t.Errorf("Verdict = %q, want PASS", e.Verdict)
+	if e.Verdict != VerdictPass {
+		t.Errorf("Verdict = %q, want %s", e.Verdict, VerdictPass)
+	}
+	if e.Decision != DecisionAccept {
+		t.Errorf("Decision = %q, want %q", e.Decision, DecisionAccept)
 	}
 }
 
@@ -88,13 +100,35 @@ func TestParseEvaluation_JSONWithNoItems_ReturnsNil(t *testing.T) {
 }
 
 func TestParseEvaluation_JSONWithEmptyVerdict_ReturnsNil(t *testing.T) {
-	raw := `{"items":[{"id":1,"title":"T","status":"complete","evidence":"e","reasoning":"r"}],"summary":"","verdict":"","review_required":false}`
+	raw := `{"items":[{"id":1,"title":"T","status":"complete","evidence":"e","reasoning":"r"}],"summary":"","verdict":"","review_required":false,"decision":"accept","confidence":0.9}`
 	e, err := parseEvaluation(raw)
 	if err != nil {
 		t.Fatalf("parseEvaluation() unexpected error: %v", err)
 	}
 	if e != nil {
 		t.Errorf("expected nil when verdict is empty, got %+v", e)
+	}
+}
+
+func TestParseEvaluation_JSONWithEmptyDecision_ReturnsNil(t *testing.T) {
+	raw := `{"items":[{"id":1,"title":"T","status":"complete","evidence":"e","reasoning":"r"}],"summary":"ok","verdict":"PASS_CHECKLIST_COMPLIANCE","review_required":false,"decision":"","confidence":0.9}`
+	e, err := parseEvaluation(raw)
+	if err != nil {
+		t.Fatalf("parseEvaluation() unexpected error: %v", err)
+	}
+	if e != nil {
+		t.Errorf("expected nil when decision is empty, got %+v", e)
+	}
+}
+
+func TestParseEvaluation_JSONWithOutOfRangeConfidence_ReturnsNil(t *testing.T) {
+	raw := `{"items":[{"id":1,"title":"T","status":"complete","evidence":"e","reasoning":"r"}],"summary":"ok","verdict":"PASS_CHECKLIST_COMPLIANCE","review_required":false,"decision":"accept","confidence":1.5}`
+	e, err := parseEvaluation(raw)
+	if err != nil {
+		t.Fatalf("parseEvaluation() unexpected error: %v", err)
+	}
+	if e != nil {
+		t.Errorf("expected nil when confidence is out of range, got %+v", e)
 	}
 }
 
@@ -107,8 +141,11 @@ func TestParseEvaluation_AllStatusValues(t *testing.T) {
 			{"id":4,"title":"D","status":"na","evidence":"","reasoning":"r"}
 		],
 		"summary": "two issues",
-		"verdict": "FAIL",
-		"review_required": false
+		"verdict": "FAIL_CHECKLIST_COMPLIANCE",
+		"review_required": false,
+		"decision": "request_info",
+		"confidence": 0.7,
+		"questions": ["What is the expected behaviour?"]
 	}`
 
 	e, err := parseEvaluation(raw)
@@ -131,8 +168,10 @@ func TestValidateEvaluation_Clean(t *testing.T) {
 			{ID: 1, Title: "Priority", Status: StatusComplete, Evidence: "Priority: Major", Reasoning: "ok"},
 			{ID: 2, Title: "Component", Status: StatusNA, Evidence: "", Reasoning: "not applicable"},
 		},
-		Summary: "All good.",
-		Verdict: "PASS",
+		Summary:    "All good.",
+		Verdict:    VerdictPass,
+		Decision:   DecisionAccept,
+		Confidence: 0.95,
 	}
 	warnings := validateEvaluation(e)
 	if len(warnings) != 0 {
@@ -145,17 +184,19 @@ func TestValidateEvaluation_PassWithMissingItem(t *testing.T) {
 		Items: []ChecklistItem{
 			{ID: 1, Title: "Priority", Status: StatusMissing, Evidence: "", Reasoning: "not present"},
 		},
-		Verdict: "PASS",
+		Verdict:    VerdictPass,
+		Decision:   DecisionAccept,
+		Confidence: 0.5,
 	}
 	warnings := validateEvaluation(e)
 	found := false
 	for _, w := range warnings {
-		if strings.Contains(w, "PASS") && strings.Contains(w, "missing") {
+		if strings.Contains(w, VerdictPass) && strings.Contains(w, "missing") {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected warning about PASS with missing items, got: %v", warnings)
+		t.Errorf("expected warning about %s with missing items, got: %v", VerdictPass, warnings)
 	}
 }
 
@@ -164,17 +205,20 @@ func TestValidateEvaluation_FailWithAllComplete(t *testing.T) {
 		Items: []ChecklistItem{
 			{ID: 1, Title: "Priority", Status: StatusComplete, Evidence: "e", Reasoning: "r"},
 		},
-		Verdict: "FAIL",
+		Verdict:         VerdictFail,
+		Decision:        DecisionReject,
+		Confidence:      0.6,
+		RejectionReason: "Does not meet criteria.",
 	}
 	warnings := validateEvaluation(e)
 	found := false
 	for _, w := range warnings {
-		if strings.Contains(w, "FAIL") && strings.Contains(w, "complete") {
+		if strings.Contains(w, VerdictFail) && strings.Contains(w, "complete") {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected warning about FAIL with all complete items, got: %v", warnings)
+		t.Errorf("expected warning about %s with all complete items, got: %v", VerdictFail, warnings)
 	}
 }
 
@@ -183,7 +227,9 @@ func TestValidateEvaluation_MissingEvidenceForNonNA(t *testing.T) {
 		Items: []ChecklistItem{
 			{ID: 1, Title: "Priority", Status: StatusComplete, Evidence: "", Reasoning: "ok"},
 		},
-		Verdict: "PASS",
+		Verdict:    VerdictPass,
+		Decision:   DecisionAccept,
+		Confidence: 0.9,
 	}
 	warnings := validateEvaluation(e)
 	found := false
@@ -202,7 +248,10 @@ func TestValidateEvaluation_UnrecognisedStatus(t *testing.T) {
 		Items: []ChecklistItem{
 			{ID: 1, Title: "Priority", Status: "unknown", Evidence: "e", Reasoning: "r"},
 		},
-		Verdict: "FAIL",
+		Verdict:         VerdictFail,
+		Decision:        DecisionReject,
+		Confidence:      0.5,
+		RejectionReason: "Not valid.",
 	}
 	warnings := validateEvaluation(e)
 	found := false
@@ -218,8 +267,10 @@ func TestValidateEvaluation_UnrecognisedStatus(t *testing.T) {
 
 func TestValidateEvaluation_UnrecognisedVerdict(t *testing.T) {
 	e := &Evaluation{
-		Items:   []ChecklistItem{{ID: 1, Title: "T", Status: StatusComplete, Evidence: "e", Reasoning: "r"}},
-		Verdict: "MAYBE",
+		Items:      []ChecklistItem{{ID: 1, Title: "T", Status: StatusComplete, Evidence: "e", Reasoning: "r"}},
+		Verdict:    "MAYBE",
+		Decision:   DecisionAccept,
+		Confidence: 0.5,
 	}
 	warnings := validateEvaluation(e)
 	found := false
@@ -233,6 +284,121 @@ func TestValidateEvaluation_UnrecognisedVerdict(t *testing.T) {
 	}
 }
 
+func TestValidateEvaluation_UnrecognisedDecision(t *testing.T) {
+	e := &Evaluation{
+		Items:      []ChecklistItem{{ID: 1, Title: "T", Status: StatusComplete, Evidence: "e", Reasoning: "r"}},
+		Verdict:    VerdictPass,
+		Decision:   "maybe",
+		Confidence: 0.5,
+	}
+	warnings := validateEvaluation(e)
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "unrecognised decision") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected warning about unrecognised decision, got: %v", warnings)
+	}
+}
+
+func TestValidateEvaluation_RequestInfoWithoutQuestions(t *testing.T) {
+	e := &Evaluation{
+		Items:      []ChecklistItem{{ID: 1, Title: "T", Status: StatusMissing, Evidence: "", Reasoning: "r"}},
+		Verdict:    VerdictFail,
+		Decision:   DecisionRequestInfo,
+		Confidence: 0.7,
+	}
+	warnings := validateEvaluation(e)
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "no questions") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected warning about missing questions for request_info, got: %v", warnings)
+	}
+}
+
+func TestValidateEvaluation_RejectWithoutReason(t *testing.T) {
+	e := &Evaluation{
+		Items:      []ChecklistItem{{ID: 1, Title: "T", Status: StatusMissing, Evidence: "", Reasoning: "r"}},
+		Verdict:    VerdictFail,
+		Decision:   DecisionReject,
+		Confidence: 0.8,
+	}
+	warnings := validateEvaluation(e)
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "no rejection_reason") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected warning about missing rejection_reason, got: %v", warnings)
+	}
+}
+
+func TestValidateEvaluation_PassWithNonAcceptDecision(t *testing.T) {
+	e := &Evaluation{
+		Items:           []ChecklistItem{{ID: 1, Title: "T", Status: StatusComplete, Evidence: "e", Reasoning: "r"}},
+		Verdict:         VerdictPass,
+		Decision:        DecisionReject,
+		Confidence:      0.5,
+		RejectionReason: "Not valid.",
+	}
+	warnings := validateEvaluation(e)
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "verdict is "+VerdictPass+" but decision is not accept") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected warning about %s verdict with non-accept decision, got: %v", VerdictPass, warnings)
+	}
+}
+
+func TestValidateEvaluation_FailWithAcceptDecision(t *testing.T) {
+	e := &Evaluation{
+		Items:      []ChecklistItem{{ID: 1, Title: "T", Status: StatusMissing, Evidence: "", Reasoning: "r"}},
+		Verdict:    VerdictFail,
+		Decision:   DecisionAccept,
+		Confidence: 0.5,
+	}
+	warnings := validateEvaluation(e)
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "verdict is "+VerdictFail+" but decision is accept") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected warning about %s verdict with accept decision, got: %v", VerdictFail, warnings)
+	}
+}
+
+func TestValidateEvaluation_OutOfRangeConfidence(t *testing.T) {
+	e := &Evaluation{
+		Items:      []ChecklistItem{{ID: 1, Title: "T", Status: StatusComplete, Evidence: "e", Reasoning: "r"}},
+		Verdict:    VerdictPass,
+		Decision:   DecisionAccept,
+		Confidence: 1.5,
+	}
+	warnings := validateEvaluation(e)
+	found := false
+	for _, w := range warnings {
+		if strings.Contains(w, "out of range") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected warning about out-of-range confidence, got: %v", warnings)
+	}
+}
+
 // --- renderEvaluationMarkdown ---
 
 func TestRenderEvaluationMarkdown_Structure(t *testing.T) {
@@ -242,8 +408,11 @@ func TestRenderEvaluationMarkdown_Structure(t *testing.T) {
 			{ID: 2, Title: "Component", Status: StatusMissing, Evidence: "", Reasoning: "Nothing listed."},
 			{ID: 3, Title: "Environment", Status: StatusNA, Evidence: "", Reasoning: "N/A for this issue type."},
 		},
-		Summary: "Component is missing.",
-		Verdict: "FAIL",
+		Summary:    "Component is missing.",
+		Verdict:    VerdictFail,
+		Decision:   DecisionRequestInfo,
+		Confidence: 0.75,
+		Questions:  []string{"Which component is affected?"},
 	}
 
 	out := renderEvaluationMarkdown(e)
@@ -258,8 +427,13 @@ func TestRenderEvaluationMarkdown_Structure(t *testing.T) {
 		"### 3. Environment — N/A",
 		"## Summary of Gaps",
 		"| 2 | Component | Missing |",
-		"## Overall Verdict: **FAIL**",
+		"## Overall Verdict: **" + VerdictFail + "**",
 		"Component is missing.",
+		"## Triage Decision",
+		"**Decision:** request_info",
+		"**Confidence:** 0.75",
+		"**Questions for reporter:**",
+		"- Which component is affected?",
 	}
 	for _, check := range checks {
 		if !strings.Contains(out, check) {
@@ -273,8 +447,10 @@ func TestRenderEvaluationMarkdown_NoGaps_NoGapTable(t *testing.T) {
 		Items: []ChecklistItem{
 			{ID: 1, Title: "Priority", Status: StatusComplete, Evidence: "Major", Reasoning: "ok"},
 		},
-		Summary: "All good.",
-		Verdict: "PASS",
+		Summary:    "All good.",
+		Verdict:    VerdictPass,
+		Decision:   DecisionAccept,
+		Confidence: 0.95,
 	}
 
 	out := renderEvaluationMarkdown(e)
@@ -282,8 +458,14 @@ func TestRenderEvaluationMarkdown_NoGaps_NoGapTable(t *testing.T) {
 	if strings.Contains(out, "Summary of Gaps") {
 		t.Error("expected no gap table when all items are complete")
 	}
-	if !strings.Contains(out, "## Overall Verdict: **PASS**") {
-		t.Error("expected PASS verdict in output")
+	if !strings.Contains(out, "## Overall Verdict: **"+VerdictPass+"**") {
+		t.Errorf("expected %s verdict in output", VerdictPass)
+	}
+	if !strings.Contains(out, "**Decision:** accept") {
+		t.Error("expected decision in output")
+	}
+	if !strings.Contains(out, "**Confidence:** 0.95") {
+		t.Error("expected confidence in output")
 	}
 }
 
@@ -292,8 +474,11 @@ func TestRenderEvaluationMarkdown_PartialInGapTable(t *testing.T) {
 		Items: []ChecklistItem{
 			{ID: 7, Title: "Expected vs Actual", Status: StatusPartial, Evidence: "Actual described.", Reasoning: "Expected not stated."},
 		},
-		Summary: "Expected behavior missing.",
-		Verdict: "FAIL",
+		Summary:    "Expected behavior missing.",
+		Verdict:    VerdictFail,
+		Decision:   DecisionRequestInfo,
+		Confidence: 0.8,
+		Questions:  []string{"What is the expected behaviour?"},
 	}
 
 	out := renderEvaluationMarkdown(e)
@@ -303,6 +488,31 @@ func TestRenderEvaluationMarkdown_PartialInGapTable(t *testing.T) {
 	}
 	if !strings.Contains(out, "| 7 | Expected vs Actual | Partial |") {
 		t.Errorf("expected partial item in gap table\nfull output:\n%s", out)
+	}
+}
+
+func TestRenderEvaluationMarkdown_RejectDecision(t *testing.T) {
+	e := &Evaluation{
+		Items: []ChecklistItem{
+			{ID: 1, Title: "Priority", Status: StatusMissing, Evidence: "", Reasoning: "Not provided."},
+		},
+		Summary:         "Issue is out of scope.",
+		Verdict:         VerdictFail,
+		Decision:        DecisionReject,
+		Confidence:      0.9,
+		RejectionReason: "This is a feature request, not a maintenance issue.",
+	}
+
+	out := renderEvaluationMarkdown(e)
+
+	if !strings.Contains(out, "**Decision:** reject") {
+		t.Error("expected decision in output")
+	}
+	if !strings.Contains(out, "**Rejection reason:** This is a feature request, not a maintenance issue.") {
+		t.Errorf("expected rejection reason in output\nfull output:\n%s", out)
+	}
+	if strings.Contains(out, "Questions for reporter") {
+		t.Error("expected no questions section for reject decision")
 	}
 }
 

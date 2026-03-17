@@ -25,7 +25,6 @@ func newRootCmd() *cobra.Command {
 		checklistPath string
 		promptPath    string
 		model         string
-		outputFormat  string
 		concurrency   int
 	)
 
@@ -35,6 +34,15 @@ func newRootCmd() *cobra.Command {
 		Version: version,
 		Long: `triage fetches Jira maintenance issues and runs cursor-agent to verify
 completeness against a configurable checklist.
+
+Each issue is evaluated and a machine-readable JSON decision is printed to
+stdout (one JSON object per issue). The full human-readable report is saved to
+triaged-maints/<KEY>/report-<KEY>.md.
+
+The decision field indicates the recommended Jira workflow transition:
+  accept       — move ticket to IN ANALYSIS
+  request_info — move ticket to AWAITING INPUT (questions listed)
+  reject       — close the ticket (rejection reason stated)
 
 Required environment variables (or .env file):
   JIRA_URL         Base URL of your Jira instance (e.g. https://acme.atlassian.net)
@@ -49,7 +57,7 @@ Optional environment variables:
   triage PROJ-123 PROJ-456
   triage --checklist ./custom-checklist.md PROJ-123
   triage --prompt ./custom-prompt.md PROJ-123
-  triage --model sonnet-4 --output json PROJ-123
+  triage --model sonnet-4 PROJ-123
   triage --concurrency 3 PROJ-123 PROJ-456 PROJ-789`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -62,7 +70,6 @@ Optional environment variables:
 				ChecklistPath: checklistPath,
 				PromptPath:    promptPath,
 				Model:         model,
-				OutputFormat:  outputFormat,
 				Concurrency:   concurrency,
 			}, os.Stdout)
 		},
@@ -74,8 +81,6 @@ Optional environment variables:
 		`path to the prompt template Markdown file (default: "./triage-prompt.md")`)
 	cmd.Flags().StringVar(&model, "model", "",
 		"cursor-agent model to use (e.g. sonnet-4, gpt-5)")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "text",
-		`output format: text | json`)
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "j", 0,
 		"max issues to triage in parallel (default 5)")
 
