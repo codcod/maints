@@ -141,7 +141,7 @@ func TestBuildPrompt(t *testing.T) {
 	template := `Read the file "issue-{{ISSUE_KEY}}.md" and evaluate it against each item in "checklist.md".
   ✅ Complete
   ❌ Missing
-PASS or FAIL verdict.`
+` + VerdictPass + ` or ` + VerdictFail + ` verdict.`
 	prompt := strings.ReplaceAll(template, promptKeyPlaceholder, key)
 
 	if !strings.Contains(prompt, "issue-MAINT-42.md") {
@@ -156,8 +156,8 @@ PASS or FAIL verdict.`
 	if !strings.Contains(prompt, "❌") {
 		t.Errorf("prompt should contain ❌ status marker")
 	}
-	if !strings.Contains(prompt, "PASS") || !strings.Contains(prompt, "FAIL") {
-		t.Errorf("prompt should contain PASS/FAIL verdict labels")
+	if !strings.Contains(prompt, VerdictPass) || !strings.Contains(prompt, VerdictFail) {
+		t.Errorf("prompt should contain %s/%s verdict labels", VerdictPass, VerdictFail)
 	}
 }
 
@@ -267,63 +267,171 @@ func TestWriteReport(t *testing.T) {
 	}
 }
 
-func TestPrintResult_TextFormat(t *testing.T) {
+func TestPrintResults_MachineReadableJSON(t *testing.T) {
 	var buf bytes.Buffer
 	r := Result{
 		IssueKey:  "MAINT-1",
 		Summary:   "My summary",
 		TriagedAt: time.Now(),
 		Report:    "All good.",
+		Evaluation: &Evaluation{
+			Decision:   DecisionAccept,
+			Confidence: 0.9,
+		},
 	}
-	printResult(&buf, r, "text")
-	out := buf.String()
+	printResults(&buf, []Result{r})
 
-	if !strings.Contains(out, "MAINT-1") {
-		t.Error("output should contain issue key")
+	var batch TriageOutcomeBatch
+	if err := json.Unmarshal(buf.Bytes(), &batch); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, buf.String())
 	}
-	if !strings.Contains(out, "My summary") {
-		t.Error("output should contain summary")
+	if batch.SchemaVersion == "" {
+		t.Error("SchemaVersion should not be empty")
 	}
-	if !strings.Contains(out, "All good.") {
-		t.Error("output should contain report content")
+	if len(batch.Issues) != 1 {
+		t.Fatalf("Issues len = %d, want 1", len(batch.Issues))
+	}
+	decoded := batch.Issues[0]
+	if decoded.IssueKey != "MAINT-1" {
+		t.Errorf("IssueKey = %q, want %q", decoded.IssueKey, "MAINT-1")
+	}
+	if decoded.Summary != "My summary" {
+		t.Errorf("Summary = %q, want %q", decoded.Summary, "My summary")
+	}
+	if decoded.Decision != DecisionAccept {
+		t.Errorf("Decision = %q, want %q", decoded.Decision, DecisionAccept)
+	}
+	if decoded.Confidence != 0.9 {
+		t.Errorf("Confidence = %g, want 0.9", decoded.Confidence)
 	}
 }
 
-func TestPrintResult_JSONFormat(t *testing.T) {
+func TestPrintResults_RequestInfoDecision(t *testing.T) {
 	var buf bytes.Buffer
 	r := Result{
 		IssueKey: "MAINT-2",
-		Summary:  "JSON test",
-		Report:   "Looks good.",
+		Summary:  "Needs more info",
+		Evaluation: &Evaluation{
+			Decision:   DecisionRequestInfo,
+			Confidence: 0.7,
+			Questions:  []string{"What version are you on?", "Can you reproduce this?"},
+		},
 	}
-	printResult(&buf, r, "json")
+	printResults(&buf, []Result{r})
 
-	var decoded Result
-	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+	var batch TriageOutcomeBatch
+	if err := json.Unmarshal(buf.Bytes(), &batch); err != nil {
 		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, buf.String())
 	}
-	if decoded.IssueKey != "MAINT-2" {
-		t.Errorf("IssueKey = %q, want %q", decoded.IssueKey, "MAINT-2")
+	if len(batch.Issues) != 1 {
+		t.Fatalf("Issues len = %d, want 1", len(batch.Issues))
 	}
-	if decoded.Summary != "JSON test" {
-		t.Errorf("Summary = %q, want %q", decoded.Summary, "JSON test")
+	decoded := batch.Issues[0]
+	if decoded.Decision != DecisionRequestInfo {
+		t.Errorf("Decision = %q, want %q", decoded.Decision, DecisionRequestInfo)
+	}
+	if len(decoded.Questions) != 2 {
+		t.Errorf("Questions len = %d, want 2", len(decoded.Questions))
 	}
 }
 
-func TestPrintResult_TextFormatWithError(t *testing.T) {
+func TestPrintResults_RejectDecision(t *testing.T) {
 	var buf bytes.Buffer
 	r := Result{
 		IssueKey: "MAINT-3",
+		Summary:  "Feature request disguised as bug",
+		Evaluation: &Evaluation{
+			Decision:        DecisionReject,
+			Confidence:      0.95,
+			RejectionReason: "This is a feature request, not a maintenance issue.",
+		},
+	}
+	printResults(&buf, []Result{r})
+
+	var batch TriageOutcomeBatch
+	if err := json.Unmarshal(buf.Bytes(), &batch); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, buf.String())
+	}
+	if len(batch.Issues) != 1 {
+		t.Fatalf("Issues len = %d, want 1", len(batch.Issues))
+	}
+	decoded := batch.Issues[0]
+	if decoded.Decision != DecisionReject {
+		t.Errorf("Decision = %q, want %q", decoded.Decision, DecisionReject)
+	}
+	if decoded.RejectionReason == "" {
+		t.Error("expected non-empty rejection reason")
+	}
+}
+
+func TestPrintResults_WithError(t *testing.T) {
+	var buf bytes.Buffer
+	r := Result{
+		IssueKey: "MAINT-4",
 		Error:    "something went wrong",
 	}
-	printResult(&buf, r, "text")
-	out := buf.String()
+	printResults(&buf, []Result{r})
 
-	if !strings.Contains(out, "ERROR: something went wrong") {
-		t.Errorf("expected ERROR prefix in output, got: %s", out)
+	var batch TriageOutcomeBatch
+	if err := json.Unmarshal(buf.Bytes(), &batch); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, buf.String())
 	}
-	if strings.Contains(out, "\n\n\n") {
-		t.Error("expected no extra blank lines after error")
+	if len(batch.Issues) != 1 {
+		t.Fatalf("Issues len = %d, want 1", len(batch.Issues))
+	}
+	if batch.Issues[0].Error != "something went wrong" {
+		t.Errorf("Error = %q, want %q", batch.Issues[0].Error, "something went wrong")
+	}
+}
+
+func TestPrintResults_NoEvaluation_ErrorInOutput(t *testing.T) {
+	var buf bytes.Buffer
+	r := Result{
+		IssueKey: "MAINT-5",
+		Summary:  "Raw output issue",
+		Report:   "Some raw agent output that couldn't be parsed.",
+	}
+	printResults(&buf, []Result{r})
+
+	var batch TriageOutcomeBatch
+	if err := json.Unmarshal(buf.Bytes(), &batch); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, buf.String())
+	}
+	if len(batch.Issues) != 1 {
+		t.Fatalf("Issues len = %d, want 1", len(batch.Issues))
+	}
+	if batch.Issues[0].Error == "" {
+		t.Error("expected error message when evaluation is nil")
+	}
+}
+
+func TestPrintResults_MultipleIssues(t *testing.T) {
+	var buf bytes.Buffer
+	results := []Result{
+		{IssueKey: "MAINT-10", Summary: "First issue", Evaluation: &Evaluation{Decision: DecisionAccept, Confidence: 0.9, Verdict: VerdictPass}},
+		{IssueKey: "MAINT-11", Summary: "Second issue", Evaluation: &Evaluation{Decision: DecisionRequestInfo, Confidence: 0.7, Verdict: VerdictFail, Questions: []string{"What version?"}}},
+		{IssueKey: "MAINT-12", Error: "fetch failed"},
+	}
+	printResults(&buf, results)
+
+	var batch TriageOutcomeBatch
+	if err := json.Unmarshal(buf.Bytes(), &batch); err != nil {
+		t.Fatalf("output is not valid JSON: %v\noutput: %s", err, buf.String())
+	}
+	if batch.SchemaVersion == "" {
+		t.Error("SchemaVersion should not be empty")
+	}
+	if len(batch.Issues) != 3 {
+		t.Fatalf("Issues len = %d, want 3", len(batch.Issues))
+	}
+	if batch.Issues[0].IssueKey != "MAINT-10" {
+		t.Errorf("Issues[0].IssueKey = %q, want %q", batch.Issues[0].IssueKey, "MAINT-10")
+	}
+	if batch.Issues[1].IssueKey != "MAINT-11" {
+		t.Errorf("Issues[1].IssueKey = %q, want %q", batch.Issues[1].IssueKey, "MAINT-11")
+	}
+	if batch.Issues[2].Error != "fetch failed" {
+		t.Errorf("Issues[2].Error = %q, want %q", batch.Issues[2].Error, "fetch failed")
 	}
 }
 

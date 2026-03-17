@@ -16,6 +16,21 @@ const (
 	StatusNA       ItemStatus = "na"
 )
 
+// Verdict values for an Evaluation.
+const (
+	VerdictPass = "PASS_CHECKLIST_COMPLIANCE"
+	VerdictFail = "FAIL_CHECKLIST_COMPLIANCE"
+)
+
+// Decision is the triage workflow outcome for a Jira ticket.
+type Decision string
+
+const (
+	DecisionAccept      Decision = "accept"
+	DecisionRequestInfo Decision = "request_info"
+	DecisionReject      Decision = "reject"
+)
+
 // ChecklistItem is the structured result for a single checklist item.
 type ChecklistItem struct {
 	ID        int        `json:"id"`
@@ -29,10 +44,14 @@ type ChecklistItem struct {
 // It is populated when the agent returns well-formed JSON; callers fall back
 // to the raw text report when it is nil.
 type Evaluation struct {
-	Items          []ChecklistItem `json:"items"`
-	Summary        string          `json:"summary"`
-	Verdict        string          `json:"verdict"`         // "PASS" or "FAIL"
-	ReviewRequired bool            `json:"review_required"` // true when the AI flags uncertainty
+	Items           []ChecklistItem `json:"items"`
+	Summary         string          `json:"summary"`
+	Verdict         string          `json:"verdict"`                    // VerdictPass or VerdictFail
+	ReviewRequired  bool            `json:"review_required"`            // true when the AI flags uncertainty
+	Decision        Decision        `json:"decision"`                   // "accept", "request_info", or "reject"
+	Confidence      float64         `json:"confidence"`                 // 0.0–1.0
+	Questions       []string        `json:"questions,omitempty"`        // required when decision is "request_info"
+	RejectionReason string          `json:"rejection_reason,omitempty"` // required when decision is "reject"
 }
 
 // parseEvaluation attempts to extract a structured Evaluation from the raw
@@ -62,13 +81,17 @@ func parseEvaluation(raw string) (*Evaluation, error) {
 }
 
 // tryUnmarshalEvaluation unmarshals s into an Evaluation and returns it only
-// when the result has at least one item and a non-empty verdict.
+// when the result has at least one item, a non-empty verdict, a valid decision,
+// and a confidence value in [0.0, 1.0].
 func tryUnmarshalEvaluation(s string) *Evaluation {
 	var e Evaluation
 	if err := json.Unmarshal([]byte(s), &e); err != nil {
 		return nil
 	}
 	if len(e.Items) == 0 || e.Verdict == "" {
+		return nil
+	}
+	if e.Decision == "" || e.Confidence < 0.0 || e.Confidence > 1.0 {
 		return nil
 	}
 	return &e
@@ -96,10 +119,14 @@ func extractJSONBlock(s string) string {
 // It returns a slice of human-readable warning strings; an empty slice means
 // no issues were found.
 func validateEvaluation(e *Evaluation) []string {
-	var warnings []string
+	warnings, hasProblem := validateItems(e.Items)
+	warnings = append(warnings, validateVerdict(e.Verdict, hasProblem)...)
+	warnings = append(warnings, validateDecision(e)...)
+	return warnings
+}
 
-	hasProblem := false
-	for _, item := range e.Items {
+func validateItems(items []ChecklistItem) (warnings []string, hasProblem bool) {
+	for _, item := range items {
 		switch item.Status {
 		case StatusComplete, StatusPartial, StatusMissing, StatusNA:
 		default:
@@ -114,20 +141,50 @@ func validateEvaluation(e *Evaluation) []string {
 			hasProblem = true
 		}
 	}
+	return warnings, hasProblem
+}
 
-	switch e.Verdict {
-	case "PASS", "FAIL":
+func validateVerdict(verdict string, hasProblem bool) []string {
+	var warnings []string
+	switch verdict {
+	case VerdictPass, VerdictFail:
 	default:
 		warnings = append(warnings,
-			fmt.Sprintf("unrecognised verdict %q (expected PASS or FAIL)", e.Verdict))
+			fmt.Sprintf("unrecognised verdict %q (expected %s or %s)", verdict, VerdictPass, VerdictFail))
 	}
-	if e.Verdict == "PASS" && hasProblem {
-		warnings = append(warnings, "verdict is PASS but one or more items are partial or missing")
+	if verdict == VerdictPass && hasProblem {
+		warnings = append(warnings, "verdict is "+VerdictPass+" but one or more items are partial or missing")
 	}
-	if e.Verdict == "FAIL" && !hasProblem {
-		warnings = append(warnings, "verdict is FAIL but all items are complete or N/A")
+	if verdict == VerdictFail && !hasProblem {
+		warnings = append(warnings, "verdict is "+VerdictFail+" but all items are complete or N/A")
 	}
+	return warnings
+}
 
+func validateDecision(e *Evaluation) []string {
+	var warnings []string
+	switch e.Decision {
+	case DecisionAccept, DecisionRequestInfo, DecisionReject:
+	default:
+		warnings = append(warnings,
+			fmt.Sprintf("unrecognised decision %q (expected accept, request_info, or reject)", e.Decision))
+	}
+	if e.Confidence < 0.0 || e.Confidence > 1.0 {
+		warnings = append(warnings,
+			fmt.Sprintf("confidence %g is out of range [0.0, 1.0]", e.Confidence))
+	}
+	if e.Decision == DecisionRequestInfo && len(e.Questions) == 0 {
+		warnings = append(warnings, "decision is request_info but no questions provided")
+	}
+	if e.Decision == DecisionReject && e.RejectionReason == "" {
+		warnings = append(warnings, "decision is reject but no rejection_reason provided")
+	}
+	if e.Verdict == VerdictPass && e.Decision != DecisionAccept {
+		warnings = append(warnings, "verdict is "+VerdictPass+" but decision is not accept")
+	}
+	if e.Verdict == VerdictFail && e.Decision == DecisionAccept {
+		warnings = append(warnings, "verdict is "+VerdictFail+" but decision is accept")
+	}
 	return warnings
 }
 
@@ -169,6 +226,30 @@ func renderEvaluationMarkdown(e *Evaluation) string {
 		sb.WriteString(e.Summary + "\n")
 	}
 
+	sb.WriteString(renderDecisionSection(e))
+
+	return sb.String()
+}
+
+func renderDecisionSection(e *Evaluation) string {
+	var sb strings.Builder
+	sb.WriteString("\n---\n\n## Triage Decision\n\n")
+	fmt.Fprintf(&sb, "**Decision:** %s\n\n", e.Decision)
+	fmt.Fprintf(&sb, "**Confidence:** %.2f\n\n", e.Confidence)
+	if e.ReviewRequired {
+		sb.WriteString("**Review required:** Yes\n")
+	} else {
+		sb.WriteString("**Review required:** No\n")
+	}
+	if len(e.Questions) > 0 {
+		sb.WriteString("\n**Questions for reporter:**\n\n")
+		for _, q := range e.Questions {
+			fmt.Fprintf(&sb, "- %s\n", q)
+		}
+	}
+	if e.RejectionReason != "" {
+		fmt.Fprintf(&sb, "\n**Rejection reason:** %s\n", e.RejectionReason)
+	}
 	return sb.String()
 }
 
