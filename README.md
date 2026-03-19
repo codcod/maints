@@ -196,6 +196,26 @@ triage --concurrency 1 MAINT-100 MAINT-101
 Results are always printed in the order the issue keys were supplied, regardless
 of completion order.
 
+### Continuous polling (server mode)
+
+Run `triage` as a daemon to periodically poll Jira and automatically triage any new, unprocessed issues:
+
+```bash
+triage serve --project MAINT
+```
+
+You can customize the polling interval and the statuses to watch:
+
+```bash
+triage serve --project MAINT --interval 10m --statuses "Open,Triage,Backlog"
+```
+
+Alternatively, use a raw JQL query for advanced filtering:
+
+```bash
+triage serve --jql 'project = Maintenance AND "Maint Component[Select List (cascading)]" IN cascadeOption(Flow) AND status IN (Open, Triage)'
+```
+
 ## How it works
 
 1. **Fetch**: Connects to the Jira REST API to retrieve the issue summary,
@@ -210,7 +230,8 @@ of completion order.
    prompt template (e.g., `triage-prompt.md`) to read both files and evaluate
    the issue against each checklist item.
 4. **Report**: The agent's response is printed to stdout and also saved as
-   `triaged-maints/KEY/report-KEY.md`.
+   `triaged-maints/KEY/report-KEY.md`. A machine-readable JSON summary is saved
+   to `triaged-maints/KEY/report-KEY.json`.
 
 After a run the directory is kept so you can review or commit the artefacts:
 
@@ -219,7 +240,8 @@ triaged-maints/
 └── MAINT-123/
     ├── issue-MAINT-123.md
     ├── checklist.md
-    └── report-MAINT-123.md
+    ├── report-MAINT-123.md
+    └── report-MAINT-123.json
 ```
 
 ## License
