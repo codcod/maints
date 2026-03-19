@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const contentTypeJSON = "application/json"
+
 // Client is a minimal Jira REST API v3 client.
 type Client struct {
 	baseURL    string
@@ -106,6 +108,62 @@ type issueResponse struct {
 	} `json:"fields"`
 }
 
+// searchResponse is the JSON envelope returned by the Jira search API.
+type searchResponse struct {
+	Issues []struct {
+		Key string `json:"key"`
+	} `json:"issues"`
+	Total      int `json:"total"`
+	MaxResults int `json:"maxResults"`
+	StartAt    int `json:"startAt"`
+}
+
+// SearchIssues returns the keys of issues matching the given JQL query.
+// Pass maxResults <= 0 to use the default of 50.
+func (c *Client) SearchIssues(ctx context.Context, jql string, maxResults int) ([]string, error) {
+	if maxResults <= 0 {
+		maxResults = 50
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/rest/api/3/search/jql", nil)
+	if err != nil {
+		return nil, fmt.Errorf("build search request: %w", err)
+	}
+	q := req.URL.Query()
+	q.Set("jql", jql)
+	q.Set("maxResults", fmt.Sprintf("%d", maxResults))
+	q.Set("fields", "key")
+	req.URL.RawQuery = q.Encode()
+	req.Header.Set("Authorization", c.authHeader)
+	req.Header.Set("Accept", contentTypeJSON)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("execute search request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read search response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("jira search API returned %d: %s", resp.StatusCode, truncate(string(respBody), 300))
+	}
+
+	var result searchResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("parse search response: %w", err)
+	}
+
+	keys := make([]string, len(result.Issues))
+	for i, issue := range result.Issues {
+		keys[i] = issue.Key
+	}
+	return keys, nil
+}
+
 // FetchIssue retrieves a Jira issue by key, including all fields and comments.
 // mappings is an optional list of extra fields to resolve from the raw JSON; if
 // nil or empty the extra-fields section of the returned Issue will be empty.
@@ -121,7 +179,7 @@ func (c *Client) FetchIssue(ctx context.Context, key string, mappings []FieldMap
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Authorization", c.authHeader)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", contentTypeJSON)
 
 	resp, err := c.http.Do(req)
 	if err != nil {

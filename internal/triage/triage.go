@@ -30,7 +30,8 @@ type Options struct {
 	ChecklistPath string
 	PromptPath    string
 	Model         string
-	Concurrency   int // max parallel triageOne calls; 0 uses defaultConcurrency
+	Concurrency   int       // max parallel triageOne calls; 0 uses defaultConcurrency
+	Log           io.Writer // per-issue progress output; defaults to os.Stderr when nil
 }
 
 // Result holds the triage outcome for a single issue.
@@ -204,12 +205,28 @@ func Run(ctx context.Context, issueKeys []string, cfg *config.Config, opts Optio
 		keys[i] = strings.ToUpper(strings.TrimSpace(k))
 	}
 
+	logW := opts.Log
+	if logW == nil {
+		logW = os.Stderr
+	}
+
 	var mu sync.Mutex
 	results := runConcurrent(keys, concurrency, func(key string) Result {
 		mu.Lock()
-		_, _ = fmt.Fprintf(os.Stderr, "Triaging %s...\n", key)
+		_, _ = fmt.Fprintf(logW, "triaging %s\n", key)
 		mu.Unlock()
-		return triageOne(ctx, key, deps, opts)
+		r := triageOne(ctx, key, deps, opts)
+		mu.Lock()
+		switch {
+		case r.Error != "":
+			_, _ = fmt.Fprintf(logW, "triaged  %s  error: %s\n", key, r.Error)
+		case r.Evaluation != nil:
+			_, _ = fmt.Fprintf(logW, "triaged  %s  decision: %s\n", key, r.Evaluation.Decision)
+		default:
+			_, _ = fmt.Fprintf(logW, "triaged  %s\n", key)
+		}
+		mu.Unlock()
+		return r
 	})
 
 	printResults(w, results)
@@ -295,7 +312,21 @@ func triageOne(ctx context.Context, key string, deps triageDeps, opts Options) R
 		result.Error = fmt.Sprintf("write report file: %s", err)
 	}
 
+	jsonFile := filepath.Join(workDir, "report-"+key+".json")
+	if err := writeJSONReport(jsonFile, result); err != nil {
+		result.Error = fmt.Sprintf("write JSON report file: %s", err)
+	}
+
 	return result
+}
+
+func writeJSONReport(path string, r Result) error {
+	outcome := buildOutcome(r)
+	data, err := json.MarshalIndent(outcome, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal outcome: %w", err)
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
 }
 
 // fmtWriter accumulates the first write error so callers can check errors
