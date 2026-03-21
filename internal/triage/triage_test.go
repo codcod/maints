@@ -136,6 +136,36 @@ func TestResolveChecklist(t *testing.T) {
 	})
 }
 
+func TestLoadKBIndex(t *testing.T) {
+	t.Run("returns nil when file is absent", func(t *testing.T) {
+		t.Setenv("TRIAGE_HOME", t.TempDir())
+		data, err := loadKBIndex()
+		if err != nil {
+			t.Fatalf("loadKBIndex() error = %v", err)
+		}
+		if data != nil {
+			t.Errorf("expected nil when kb-index.md is absent, got %d bytes", len(data))
+		}
+	})
+
+	t.Run("returns file content when present", func(t *testing.T) {
+		tmp := t.TempDir()
+		content := []byte("# KB Index\n## Section A\n")
+		if err := os.WriteFile(filepath.Join(tmp, defaultKBIndexFile), content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("TRIAGE_HOME", tmp)
+
+		data, err := loadKBIndex()
+		if err != nil {
+			t.Fatalf("loadKBIndex() error = %v", err)
+		}
+		if !bytes.Equal(data, content) {
+			t.Errorf("loadKBIndex() = %q, want %q", data, content)
+		}
+	})
+}
+
 func TestBuildPrompt(t *testing.T) {
 	key := "MAINT-42"
 	template := `Read the file "issue-{{ISSUE_KEY}}.md" and evaluate it against each item in "checklist.md".

@@ -20,6 +20,7 @@ import (
 const (
 	defaultChecklistFile = "checklist.md"
 	defaultPromptFile    = "triage-prompt.md"
+	defaultKBIndexFile   = "kb-index.md"
 	promptKeyPlaceholder = "{{ISSUE_KEY}}"
 	defaultConcurrency   = 5
 	outcomeSchemaVersion = "1"
@@ -75,6 +76,7 @@ type TriageOutcome struct {
 // triageDeps groups the resolved dependencies shared across triageOne calls.
 type triageDeps struct {
 	checklistData  []byte
+	kbIndexData    []byte // optional; nil when kb-index.md is not present in TRIAGE_HOME
 	promptTemplate []byte
 	mappings       []jira.FieldMapping
 	jiraClient     *jira.Client
@@ -97,6 +99,25 @@ func triageHome() (string, error) {
 		xdgConfigHome = filepath.Join(home, ".config")
 	}
 	return filepath.Join(xdgConfigHome, "triage"), nil
+}
+
+// loadKBIndex reads the optional kb-index.md from triage home.
+// If the file does not exist nil is returned without error; callers should
+// treat a nil result as "no knowledge base index available".
+func loadKBIndex() ([]byte, error) {
+	th, err := triageHome()
+	if err != nil {
+		return nil, err
+	}
+	p := filepath.Join(th, defaultKBIndexFile)
+	data, err := os.ReadFile(p)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read kb-index %q: %w", p, err)
+	}
+	return data, nil
 }
 
 // loadFieldsMappings reads the optional fields-mapping.json from triage home.
@@ -187,8 +208,14 @@ func Run(ctx context.Context, issueKeys []string, cfg *config.Config, opts Optio
 		return err
 	}
 
+	kbIndexData, err := loadKBIndex()
+	if err != nil {
+		return err
+	}
+
 	deps := triageDeps{
 		checklistData:  checklistData,
+		kbIndexData:    kbIndexData,
 		promptTemplate: promptTemplate,
 		mappings:       mappings,
 		jiraClient:     jira.NewClient(cfg.JiraURL, cfg.JiraUsername, cfg.JiraAPIToken),
@@ -283,6 +310,13 @@ func triageOne(ctx context.Context, key string, deps triageDeps, opts Options) R
 	if err := os.WriteFile(checklistDst, deps.checklistData, 0o644); err != nil {
 		result.Error = fmt.Sprintf("write checklist file: %s", err)
 		return result
+	}
+
+	if len(deps.kbIndexData) > 0 {
+		if err := os.WriteFile(filepath.Join(workDir, defaultKBIndexFile), deps.kbIndexData, 0o644); err != nil {
+			result.Error = fmt.Sprintf("write kb-index file: %s", err)
+			return result
+		}
 	}
 
 	prompt := strings.ReplaceAll(string(deps.promptTemplate), promptKeyPlaceholder, key)
