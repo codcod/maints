@@ -4,9 +4,13 @@
 # Environment
 .env
 .link-to-xdg-config-home
+knowledge-base/
 
 # Triage workspace output
 triaged-maints/
 
 # macOS
 .DS_Store
+
+# AI
+.cursor/
