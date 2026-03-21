@@ -179,11 +179,13 @@ func validateDecision(e *Evaluation) []string {
 	if e.Decision == DecisionReject && e.RejectionReason == "" {
 		warnings = append(warnings, "decision is reject but no rejection_reason provided")
 	}
-	if e.Verdict == VerdictPass && e.Decision != DecisionAccept {
-		warnings = append(warnings, "verdict is "+VerdictPass+" but decision is not accept")
+	if e.Verdict == VerdictPass && e.Decision == DecisionReject {
+		warnings = append(warnings,
+			"verdict is "+VerdictPass+" but decision is reject — if the issue is not a valid defect, the Issue Type Verification item should not be complete")
 	}
-	if e.Verdict == VerdictFail && e.Decision == DecisionAccept {
-		warnings = append(warnings, "verdict is "+VerdictFail+" but decision is accept")
+	if e.Verdict == VerdictPass && e.Decision == DecisionRequestInfo {
+		warnings = append(warnings,
+			"verdict is "+VerdictPass+" but decision is request_info — all items passed so no info should be needed")
 	}
 	return warnings
 }

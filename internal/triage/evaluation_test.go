@@ -341,7 +341,7 @@ func TestValidateEvaluation_RejectWithoutReason(t *testing.T) {
 	}
 }
 
-func TestValidateEvaluation_PassWithNonAcceptDecision(t *testing.T) {
+func TestValidateEvaluation_PassWithRejectDecision(t *testing.T) {
 	e := &Evaluation{
 		Items:           []ChecklistItem{{ID: 1, Title: "T", Status: StatusComplete, Evidence: "e", Reasoning: "r"}},
 		Verdict:         VerdictPass,
@@ -352,31 +352,47 @@ func TestValidateEvaluation_PassWithNonAcceptDecision(t *testing.T) {
 	warnings := validateEvaluation(e)
 	found := false
 	for _, w := range warnings {
-		if strings.Contains(w, "verdict is "+VerdictPass+" but decision is not accept") {
+		if strings.Contains(w, VerdictPass) && strings.Contains(w, "reject") {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected warning about %s verdict with non-accept decision, got: %v", VerdictPass, warnings)
+		t.Errorf("expected warning about %s verdict with reject decision, got: %v", VerdictPass, warnings)
 	}
 }
 
-func TestValidateEvaluation_FailWithAcceptDecision(t *testing.T) {
+func TestValidateEvaluation_PassWithRequestInfoDecision(t *testing.T) {
 	e := &Evaluation{
-		Items:      []ChecklistItem{{ID: 1, Title: "T", Status: StatusMissing, Evidence: "", Reasoning: "r"}},
-		Verdict:    VerdictFail,
-		Decision:   DecisionAccept,
+		Items:      []ChecklistItem{{ID: 1, Title: "T", Status: StatusComplete, Evidence: "e", Reasoning: "r"}},
+		Verdict:    VerdictPass,
+		Decision:   DecisionRequestInfo,
 		Confidence: 0.5,
+		Questions:  []string{"What?"},
 	}
 	warnings := validateEvaluation(e)
 	found := false
 	for _, w := range warnings {
-		if strings.Contains(w, "verdict is "+VerdictFail+" but decision is accept") {
+		if strings.Contains(w, VerdictPass) && strings.Contains(w, "request_info") {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected warning about %s verdict with accept decision, got: %v", VerdictFail, warnings)
+		t.Errorf("expected warning about %s verdict with request_info decision, got: %v", VerdictPass, warnings)
+	}
+}
+
+func TestValidateEvaluation_FailWithAcceptDecision_NoWarning(t *testing.T) {
+	e := &Evaluation{
+		Items:      []ChecklistItem{{ID: 1, Title: "T", Status: StatusMissing, Evidence: "", Reasoning: "r"}},
+		Verdict:    VerdictFail,
+		Decision:   DecisionAccept,
+		Confidence: 0.7,
+	}
+	warnings := validateEvaluation(e)
+	for _, w := range warnings {
+		if strings.Contains(w, VerdictFail) && strings.Contains(w, "accept") {
+			t.Errorf("should not warn about FAIL+accept (valid under new model), got: %v", warnings)
+		}
 	}
 }
 
