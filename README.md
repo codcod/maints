@@ -1,7 +1,7 @@
-# MAINTs triage tool (triage)
+# MAINTs CLI (`maints`)
 
-A CLI tool that uses `cursor-agent` to triage Jira maintenance issues against a
-checklist.
+A CLI that uses `cursor-agent` to triage Jira maintenance issues against a
+checklist (`maints triage`), plus other maintenance commands.
 
 It fetches issue data from Jira, prepares a temporary workspace with the issue
 content and a checklist, and then instructs the AI agent to verify
@@ -13,7 +13,7 @@ completeness.
 
 ```bash
 brew tap codcod/taps
-brew install maints-triage
+brew install maints
 ```
 
 ### From source
@@ -30,14 +30,14 @@ brew install maints-triage
 ```bash
 git clone https://github.com/codcod/maints-triage.git
 cd maints-triage
-go install .
+go install ./cmd/maints
 ```
 
 Verify installation:
 
 ```bash
-triage --version
-triage --help
+maints --version
+maints --help
 ```
 
 ### Build from source
@@ -47,11 +47,11 @@ If you prefer to build the binary without installing it to your `$GOPATH/bin`:
 ```bash
 git clone https://github.com/codcod/maints-triage.git
 cd maints-triage
-go build -o triage .
+go build -o maints ./cmd/maints
 ```
 
-This creates a `triage` binary in the current directory. You can then run it
-with `./triage`.
+This creates a `maints` binary in the current directory. You can then run it
+with `./maints` (for example `./maints triage MAINT-123`).
 
 You can also use `just`, which automatically stamps the binary with the current
 git tag:
@@ -67,7 +67,7 @@ Binaries built outside of a tagged commit show the tag plus a commit suffix
 #### Checking the version
 
 ```bash
-triage --version
+maints --version
 ```
 
 ## Configuration
@@ -92,7 +92,7 @@ via environment variables or a `.env` file in the current directory.
 
 ### Configuration directory
 
-`triage` looks for configuration files (checklist, prompt template, field
+`maints triage` looks for configuration files (checklist, prompt template, field
 mappings) in the following order:
 
 1. Explicit command-line flags (where available)
@@ -137,13 +137,13 @@ Example `fields-mapping.json`:
 Triage a single issue:
 
 ```bash
-triage MAINT-123
+maints triage MAINT-123
 ```
 
 Triage multiple issues in one go:
 
 ```bash
-triage MAINT-123 MAINT-456 MAINT-789
+maints triage MAINT-123 MAINT-456 MAINT-789
 ```
 
 ### Custom checklist
@@ -151,7 +151,7 @@ triage MAINT-123 MAINT-456 MAINT-789
 To use an explicit checklist (overriding default locations):
 
 ```bash
-triage --checklist ./my-custom-checklist.md MAINT-123
+maints triage --checklist ./my-custom-checklist.md MAINT-123
 ```
 
 ### Custom prompt
@@ -159,7 +159,7 @@ triage --checklist ./my-custom-checklist.md MAINT-123
 To use a custom prompt template (overriding default locations):
 
 ```bash
-triage --prompt ./my-custom-prompt.md MAINT-123
+maints triage --prompt ./my-custom-prompt.md MAINT-123
 ```
 
 ### AI model selection
@@ -167,15 +167,15 @@ triage --prompt ./my-custom-prompt.md MAINT-123
 Specify which AI model the agent should use (e.g., `sonnet-4`, `gpt-4o`):
 
 ```bash
-triage --model sonnet-4 MAINT-123
+maints triage --model sonnet-4 MAINT-123
 ```
 
 ### Output format
 
-Output the triage report as JSON (useful for piping to other tools):
+Machine-readable JSON (one object per issue) is written to stdout, which is convenient for piping:
 
 ```bash
-triage --output json MAINT-123 | jq .
+maints triage MAINT-123 | jq .
 ```
 
 ### Concurrent batch triage
@@ -186,11 +186,11 @@ time roughly proportionally. Use `--concurrency` / `-j` to tune the limit:
 
 ```bash
 # triage 10 issues with 3 parallel workers
-triage --concurrency 3 MAINT-100 MAINT-101 MAINT-102 MAINT-103 MAINT-104 \
-                       MAINT-105 MAINT-106 MAINT-107 MAINT-108 MAINT-109
+maints triage --concurrency 3 MAINT-100 MAINT-101 MAINT-102 MAINT-103 MAINT-104 \
+                             MAINT-105 MAINT-106 MAINT-107 MAINT-108 MAINT-109
 
 # force sequential execution
-triage --concurrency 1 MAINT-100 MAINT-101
+maints triage --concurrency 1 MAINT-100 MAINT-101
 ```
 
 Results are always printed in the order the issue keys were supplied, regardless
@@ -198,22 +198,22 @@ of completion order.
 
 ### Continuous polling (server mode)
 
-Run `triage` as a daemon to periodically poll Jira and automatically triage any new, unprocessed issues:
+Run `maints serve` as a daemon to periodically poll Jira and automatically triage any new, unprocessed issues:
 
 ```bash
-triage serve --project MAINT
+maints serve --project MAINT
 ```
 
 You can customize the polling interval and the statuses to watch:
 
 ```bash
-triage serve --project MAINT --interval 10m --statuses "Open,Triage,Backlog"
+maints serve --project MAINT --interval 10m --statuses "Open,Triage,Backlog"
 ```
 
 Alternatively, use a raw JQL query for advanced filtering:
 
 ```bash
-triage serve --jql 'project = Maintenance AND "Maint Component[Select List (cascading)]" IN cascadeOption(Flow) AND status IN (Open, Triage)'
+maints serve --jql 'project = Maintenance AND "Maint Component[Select List (cascading)]" IN cascadeOption(Flow) AND status IN (Open, Triage)'
 ```
 
 ## How it works

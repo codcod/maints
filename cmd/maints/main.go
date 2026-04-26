@@ -24,6 +24,20 @@ func main() {
 }
 
 func newRootCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:     "maints",
+		Short:   "CLI for maintenance workflows",
+		Version: version,
+		Long: `maints groups commands for working with Jira maintenance issues and related tooling.
+
+Use "maints <command> --help" for details on a specific command.`,
+	}
+	root.AddCommand(newTriageCmd())
+	root.AddCommand(newServeCmd())
+	return root
+}
+
+func newTriageCmd() *cobra.Command {
 	var (
 		checklistPath string
 		promptPath    string
@@ -32,9 +46,8 @@ func newRootCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:     "triage <ISSUE-KEY> [ISSUE-KEY...]",
-		Short:   "Triage Jira maintenance issues using cursor-agent",
-		Version: version,
+		Use:   "triage <ISSUE-KEY> [ISSUE-KEY...]",
+		Short: "Triage Jira maintenance issues using cursor-agent",
 		Long: `triage fetches Jira maintenance issues and runs cursor-agent to verify
 completeness against a configurable checklist.
 
@@ -56,12 +69,12 @@ Required environment variables (or .env file):
 Optional environment variables:
   TRIAGE_HOME      Directory for triage configuration files
                    (default: $XDG_CONFIG_HOME/triage, or ~/.config/triage)`,
-		Example: `  triage PROJ-123
-  triage PROJ-123 PROJ-456
-  triage --checklist ./custom-checklist.md PROJ-123
-  triage --prompt ./custom-prompt.md PROJ-123
-  triage --model sonnet-4 PROJ-123
-  triage --concurrency 3 PROJ-123 PROJ-456 PROJ-789`,
+		Example: `  maints triage PROJ-123
+  maints triage PROJ-123 PROJ-456
+  maints triage --checklist ./custom-checklist.md PROJ-123
+  maints triage --prompt ./custom-prompt.md PROJ-123
+  maints triage --model sonnet-4 PROJ-123
+  maints triage --concurrency 3 PROJ-123 PROJ-456 PROJ-789`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
@@ -86,8 +99,6 @@ Optional environment variables:
 		"cursor-agent model to use (e.g. sonnet-4, gpt-5)")
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "j", 0,
 		"max issues to triage in parallel (default 5)")
-
-	cmd.AddCommand(newServeCmd())
 
 	return cmd
 }
@@ -118,10 +129,10 @@ triaged-maints/<KEY>/. No separate state file is maintained.
 
 In a future release this command will also post the triage outcome as a Jira
 comment and transition the ticket to the appropriate workflow status.`,
-		Example: `  triage serve --project MAINT
-  triage serve --project MAINT --interval 10m
-  triage serve --project MAINT --statuses "Open,Triage,Backlog"
-  triage serve --jql 'project = Maintenance AND "Maint Component[Select List (cascading)]" IN cascadeOption(Flow) AND status IN (Open, Triage)'`,
+		Example: `  maints serve --project MAINT
+  maints serve --project MAINT --interval 10m
+  maints serve --project MAINT --statuses "Open,Triage,Backlog"
+  maints serve --jql 'project = Maintenance AND "Maint Component[Select List (cascading)]" IN cascadeOption(Flow) AND status IN (Open, Triage)'`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if jql == "" && project == "" {
 				return fmt.Errorf("either --jql or --project must be provided")
