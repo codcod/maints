@@ -11,6 +11,7 @@ import (
 	"github.com/codcod/maints-triage/internal/config"
 	"github.com/codcod/maints-triage/internal/dash"
 	"github.com/codcod/maints-triage/internal/dig"
+	"github.com/codcod/maints-triage/internal/fixversion"
 	"github.com/codcod/maints-triage/internal/jira"
 	"github.com/codcod/maints-triage/internal/open"
 	"github.com/codcod/maints-triage/internal/server"
@@ -41,6 +42,7 @@ Use "maints <command> --help" for details on a specific command.`,
 	root.AddCommand(newDigCmd())
 	root.AddCommand(newDashCmd())
 	root.AddCommand(newOpenCmd())
+	root.AddCommand(newFixVersionCmd())
 	return root
 }
 
@@ -206,6 +208,69 @@ Optional environment variables:
 	cmd.Flags().StringVar(&issueType, "issue-type", "", "issue type name in target project (default: $JIRA_DIG_ISSUE_TYPE or Bug)")
 	cmd.Flags().StringVar(&linkType, "link-type", "", `issue link type name (default: $JIRA_LINK_TYPE, $JIRA_SOLVES_LINK_TYPE, or "Solved by")`)
 	cmd.Flags().BoolVar(&linkSwapEnds, "link-swap-ends", false, "swap outward/inward ends for the issue link")
+	return cmd
+}
+
+func newFixVersionCmd() *cobra.Command {
+	var (
+		query        string
+		versions     []string
+		remove       bool
+		linkType     string
+		digProject   string
+		maintProject string
+	)
+	cmd := &cobra.Command{
+		Use:   "fixversion [DIG-KEY]...",
+		Short: "Set or remove fix version(s) on DIG issues; comment on linked MAINTs when Jira update succeeds",
+		Long: `fixversion sets fixVersions on each DIG (adds names, or removes them with --remove)
+using the same issue link as maints dig / maints dash (default "Solved by", or $JIRA_LINK_TYPE)
+to find the linked MAINT. After a successful update, it posts a Patch Releases comment
+on that MAINT for each version that was added or removed.
+
+Requires: JIRA_URL, JIRA_USERNAME, JIRA_API_TOKEN.
+
+Example:
+  maints fixversion DIG-1 DIG-2 --version "DS 2025.09.5" --version "1.0"
+  maints fixversion --query "project = DIG and status = 'In Progress'" --version "1.0"
+  maints fixversion DIG-1 --version "1.0" --remove`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(query) != "" && len(args) > 0 {
+				return fmt.Errorf("use either issue keys or --query, not both")
+			}
+			if strings.TrimSpace(query) == "" && len(args) == 0 {
+				return fmt.Errorf("provide DIG key(s) or --query JQL")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.LoadJiraOnly()
+			if err != nil {
+				return err
+			}
+			lt := strings.TrimSpace(linkType)
+			if lt == "" {
+				lt = dig.DefaultLinkType()
+			}
+			client := jira.NewClient(cfg.JiraURL, cfg.JiraUsername, cfg.JiraAPIToken)
+			return fixversion.Run(cmd.Context(), client, fixversion.Options{
+				Keys:         args,
+				JQL:          strings.TrimSpace(query),
+				Versions:     versions,
+				Remove:       remove,
+				LinkType:     lt,
+				DigProject:   digProject,
+				MaintProject: maintProject,
+			}, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		},
+	}
+	cmd.Flags().StringArrayVar(&versions, "version", nil, "fix version name to set or remove (required; use multiple times for several versions)")
+	cmd.Flags().StringVar(&query, "query", "", "JQL to select DIG issues (mutually exclusive with issue keys on the command line)")
+	cmd.Flags().BoolVar(&remove, "remove", false, "remove the given fix version name(s) instead of adding them")
+	cmd.Flags().StringVar(&linkType, "link-type", "", `link type to follow to MAINT (default: $JIRA_LINK_TYPE or "Solved by")`)
+	cmd.Flags().StringVar(&digProject, "dig-project", "DIG", "project key to validate command-line and query results (e.g. DIG)")
+	cmd.Flags().StringVar(&maintProject, "maint-project", "MAINT", "key prefix of MAINT to comment on (e.g. MAINT)")
+	_ = cmd.MarkFlagRequired("version")
 	return cmd
 }
 
