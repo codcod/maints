@@ -12,6 +12,7 @@ import (
 	"github.com/codcod/maints-triage/internal/dash"
 	"github.com/codcod/maints-triage/internal/dig"
 	"github.com/codcod/maints-triage/internal/jira"
+	"github.com/codcod/maints-triage/internal/open"
 	"github.com/codcod/maints-triage/internal/server"
 	"github.com/codcod/maints-triage/internal/triage"
 )
@@ -39,7 +40,40 @@ Use "maints <command> --help" for details on a specific command.`,
 	root.AddCommand(newServeCmd())
 	root.AddCommand(newDigCmd())
 	root.AddCommand(newDashCmd())
+	root.AddCommand(newOpenCmd())
 	return root
+}
+
+func newOpenCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "open [ISSUE-KEY]...",
+		Short: "Open Jira issues in the default web browser",
+		Long: `open uses $JIRA_URL to build a browse link for each key and opens
+it in your default browser. Only JIRA_URL is required; no Jira API credentials are needed.
+
+Issue keys look like PROJ-123 (letters, numbers, and underscores in the project part).`,
+		Example: `  maints open MAINT-41509
+  maints open MAINT-1 DIG-2`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			base, err := config.LoadJiraURLOnly()
+			if err != nil {
+				return err
+			}
+			for _, a := range args {
+				k, err := open.ValidateKey(a)
+				if err != nil {
+					return err
+				}
+				u := open.IssueBrowseURL(base, k)
+				if err := open.OpenBrowser(u); err != nil {
+					return fmt.Errorf("%s: %w", k, err)
+				}
+			}
+			return nil
+		},
+	}
+	return cmd
 }
 
 func newDashCmd() *cobra.Command {

@@ -4,6 +4,7 @@ A Jira maintenance toolkit:
 - `maints triage` and `maints serve` use an AI agent to evaluate issues.
 - `maints dig` copies issues to another project with team and links.
 - `maints dash` lists your MAINT issues and related DIG work in the terminal.
+- `maints open` opens Jira issue pages in the browser.
 
 Each command is documented in the `docs/` folder.
 
@@ -55,9 +56,8 @@ Builds with no git context report `dev` as the version.
 Set environment variables or use a **`.env`** file in the working directory. Copy the template to get started: `cp .env.example .env`
 
 ### Global Jira Settings (used by all commands)
-- `JIRA_URL`: Jira base URL (e.g., `https://your-company.atlassian.net`)
-- `JIRA_USERNAME`: Jira account email
-- `JIRA_API_TOKEN`: Jira API token
+- `JIRA_URL`: Jira base URL (e.g., `https://your-company.atlassian.net`) — required for every command
+- `JIRA_USERNAME` / `JIRA_API_TOKEN`: required for any command that calls the Jira API (not for [`maints open`](docs/open.md), which only opens browse URLs)
 
 ### Agent Settings (used by `triage` and `serve`)
 - `CURSOR_API_KEY`: API key for `cursor-agent`
@@ -75,6 +75,7 @@ Set environment variables or use a **`.env`** file in the working directory. Cop
 - **[`maints serve`](docs/serve.md)** — Poll Jira and triage new issues automatically.
 - **[`maints dig`](docs/dig.md)** — Duplicate issues into another project with team and links.
 - **[`maints dash`](docs/dash.md)** — List your MAINT Flow issues and linked DIG tickets in the terminal.
+- **[`maints open`](docs/open.md)** — Open issue keys in the default browser (`MAINT-…`, `DIG-…`, etc.).
 
 ```bash
 maints --help
