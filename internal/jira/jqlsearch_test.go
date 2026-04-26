@@ -19,6 +19,19 @@ func TestAssigneeString(t *testing.T) {
 	}
 }
 
+func TestFixVersionNamesString(t *testing.T) {
+	if got := FixVersionNamesString(nil); got != "" {
+		t.Fatalf("nil: %q", got)
+	}
+	if got := FixVersionNamesString([]any{}); got != "" {
+		t.Fatalf("empty: %q", got)
+	}
+	v := []any{map[string]any{"name": "  3.0  "}, map[string]any{"name": "2.0"}}
+	if got, want := FixVersionNamesString(v), "3.0, 2.0"; got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
 func TestGetIssueFields_issuelinks(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/rest/api/3/issue/MAINT-1" {

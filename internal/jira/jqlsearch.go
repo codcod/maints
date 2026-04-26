@@ -173,33 +173,54 @@ func AssigneeString(v any) string {
 	return ""
 }
 
-// GetIssueDashFields fetches status, assignee, summary, and priority for one issue.
-func (c *Client) GetIssueDashFields(ctx context.Context, key string) (status, assignee, summary, priority string, err error) {
+// FixVersionNamesString returns fix version names from Jira's `fixVersions` field
+// value (array of objects with `name`), joined with `", "`. Returns "" if nil or empty.
+func FixVersionNamesString(v any) string {
+	arr, _ := v.([]any)
+	if len(arr) == 0 {
+		return ""
+	}
+	var names []string
+	for _, item := range arr {
+		m, _ := item.(map[string]any)
+		if m == nil {
+			continue
+		}
+		n, _ := m["name"].(string)
+		if t := strings.TrimSpace(n); t != "" {
+			names = append(names, t)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// GetIssueDashFields fetches status, assignee, summary, priority, and fixVersions for one issue.
+func (c *Client) GetIssueDashFields(ctx context.Context, key string) (status, assignee, summary, priority, fixVersions string, err error) {
 	escaped := url.PathEscape(strings.TrimSpace(key))
-	u := fmt.Sprintf("%s/rest/api/3/issue/%s?fields=status,assignee,summary,priority", c.baseURL, escaped)
+	u := fmt.Sprintf("%s/rest/api/3/issue/%s?fields=status,assignee,summary,priority,fixVersions", c.baseURL, escaped)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return "", "", "", "", err
+		return "", "", "", "", "", err
 	}
 	req.Header.Set("Authorization", c.authHeader)
 	req.Header.Set("Accept", contentTypeJSON)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return "", "", "", "", err
+		return "", "", "", "", "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return "", "", "", "", fmt.Errorf("jira: %d %s", resp.StatusCode, truncate(string(body), 200))
+		return "", "", "", "", "", fmt.Errorf("jira: %d %s", resp.StatusCode, truncate(string(body), 200))
 	}
 	var raw struct {
 		Fields map[string]any `json:"fields"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
-		return "", "", "", "", err
+		return "", "", "", "", "", err
 	}
 	if raw.Fields == nil {
-		return "", "", "", "", nil
+		return "", "", "", "", "", nil
 	}
 	if st, ok := raw.Fields["status"].(map[string]any); ok {
 		if n, _ := st["name"].(string); n != "" {
@@ -215,6 +236,6 @@ func (c *Client) GetIssueDashFields(ctx context.Context, key string) (status, as
 			priority = strings.TrimSpace(n)
 		}
 	}
-	return status, assignee, summary, priority, nil
+	fixVersions = FixVersionNamesString(raw.Fields["fixVersions"])
+	return status, assignee, summary, priority, fixVersions, nil
 }
-

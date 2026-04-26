@@ -82,6 +82,7 @@ func newDashCmd() *cobra.Command {
 		digProject string
 		linkType   string
 		user       string
+		columns    string
 		debug      bool
 	)
 	cmd := &cobra.Command{
@@ -97,6 +98,8 @@ assignee = the given string). Do not use --user together with --jql.
 Requires Jira credentials only (no cursor-agent).`,
 		Example: `  maints dash
   maints dash --user colleague@example.com
+  maints dash --columns "key, priority, due"
+  maints dash --columns "key, summary[20], fixversion, assignee"
   maints dash --dig-project DIG
   maints dash --jql 'project = MAINT AND assignee = currentUser() ORDER BY created ASC'`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -110,6 +113,7 @@ Requires Jira credentials only (no cursor-agent).`,
 				DigProject: digProject,
 				LinkType:   linkType,
 				User:       user,
+				Columns:    columns,
 				Debug:      debug,
 			})
 		},
@@ -118,6 +122,7 @@ Requires Jira credentials only (no cursor-agent).`,
 	cmd.Flags().StringVar(&user, "user", "", "built-in JQL: filter assignee to this Jira user (email, name, or id; mutually exclusive with --jql)")
 	cmd.Flags().StringVar(&digProject, "dig-project", "DIG", "Jira project key for linked work items (e.g. DIG)")
 	cmd.Flags().StringVar(&linkType, "link-type", "", `issue link name to follow (default: $JIRA_LINK_TYPE or "Solved by")`)
+	cmd.Flags().StringVar(&columns, "columns", "", `comma-separated column names: key, priority, status, due, summary, fixversion, assignee (default: all, in that order; case-insensitive). Use summary[N] for a custom max width in runes (e.g. summary[20]); default is 50`)
 	cmd.Flags().BoolVar(&debug, "debug", false, "print each issue's issuelinks (type names, keys) to stderr")
 	return cmd
 }

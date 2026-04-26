@@ -34,27 +34,29 @@ func jiraAssigneeJQLString(s string) string {
 // maxSummaryRunes is the max display width of the SUMMARY column (MAINT and DIG lines).
 const maxSummaryRunes = 50
 
-// sepCol is the gap between columns (spaces only so ANSI is applied per line, not per cell).
+// dashColGap is the gap between columns (spaces only so ANSI is applied per line, not per cell).
 const dashColGap = "  "
 
-// Row is one MAINT line plus linked DIG issues.
+// Row is one MAINT line plus linked DIG issues (fields follow table column order).
 type Row struct {
-	Key      string
-	Priority string
-	Summary  string
-	Status   string
-	Due      string
-	Assignee string
-	DIGs     []DigRow
+	Key        string
+	Priority   string
+	Status     string
+	Due        string
+	Summary    string
+	FixVersion string
+	Assignee   string
+	DIGs       []DigRow
 }
 
 // DigRow is a DIG issue shown under a MAINT.
 type DigRow struct {
-	Key      string
-	Priority string
-	Summary  string
-	Status   string
-	Assignee string
+	Key        string
+	Priority   string
+	Status     string
+	Summary    string
+	FixVersion string
+	Assignee   string
 }
 
 // Options control dash display and link resolution.
@@ -66,6 +68,8 @@ type Options struct {
 	User string
 	// Debug prints issuelink metadata to errW (link types, keys) for troubleshooting.
 	Debug bool
+	// Columns is a comma-separated list of column names (e.g. key, priority, due). Empty means all default columns.
+	Columns string
 }
 
 // Run fetches Jira and prints a text dashboard to w; link diagnostics to errW when o.Debug.
@@ -89,6 +93,7 @@ func Run(ctx context.Context, client *jira.Client, w, errW io.Writer, o Options)
 		"priority",
 		"assignee",
 		"issuelinks",
+		"fixVersions",
 	})
 	if err != nil {
 		return err
@@ -125,13 +130,20 @@ func Run(ctx context.Context, client *jira.Client, w, errW io.Writer, o Options)
 				if d.summary != "" {
 					rows[i].DIGs[j].Summary = d.summary
 				}
+				if d.fixVersion != "" {
+					rows[i].DIGs[j].FixVersion = d.fixVersion
+				}
 				if d.priority != "" {
 					rows[i].DIGs[j].Priority = d.priority
 				}
 			}
 		}
 	}
-	printDashboard(w, rows, useColor())
+	colSpecs, err := parseDashColumns(o.Columns)
+	if err != nil {
+		return err
+	}
+	printDashboard(w, rows, useColor(), colSpecs)
 	return nil
 }
 
@@ -241,7 +253,7 @@ func linkTypeMatch(want string, typeMap map[string]any) bool {
 }
 
 type digDetails struct {
-	status, assignee, summary, priority string
+	status, assignee, summary, priority, fixVersion string
 }
 
 // batchDigDetails loads full status, assignee (displayName / email / name), and summary for DIG keys.
@@ -261,7 +273,7 @@ func batchDigDetails(ctx context.Context, c *jira.Client, keys []string) (map[st
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			st, as, su, pr, err := c.GetIssueDashFields(ctx, k)
+			st, as, su, pr, fv, err := c.GetIssueDashFields(ctx, k)
 			if err != nil {
 				mu.Lock()
 				if firstErr == nil {
@@ -274,7 +286,7 @@ func batchDigDetails(ctx context.Context, c *jira.Client, keys []string) (map[st
 				as = "Unassigned"
 			}
 			mu.Lock()
-			out[k] = digDetails{status: st, assignee: as, summary: su, priority: pr}
+			out[k] = digDetails{status: st, assignee: as, summary: su, priority: pr, fixVersion: fv}
 			mu.Unlock()
 		}()
 	}
@@ -315,8 +327,9 @@ func buildRows(hits []jira.IssueJQL, digProject, linkType string) ([]Row, error)
 		if strings.TrimSpace(asm) == "" {
 			asm = "Unassigned"
 		}
+		fv := jira.FixVersionNamesString(h.Fields["fixVersions"])
 		rows = append(rows, Row{
-			Key: h.Key, Priority: prior, Summary: summary, Status: status, Due: due, Assignee: asm, DIGs: digs,
+			Key: h.Key, Priority: prior, Status: status, Due: due, Summary: summary, FixVersion: fv, Assignee: asm, DIGs: digs,
 		})
 	}
 	return rows, nil
@@ -362,7 +375,8 @@ func digsSolvedBy(maintKey string, fields map[string]any, wantLinkType, digProje
 			asg = "Unassigned"
 		}
 		sum := asString(inner["summary"])
-		out = append(out, DigRow{Key: digKey, Summary: sum, Status: st, Assignee: asg, Priority: prio})
+		fv := jira.FixVersionNamesString(inner["fixVersions"])
+		out = append(out, DigRow{Key: digKey, Priority: prio, Status: st, Summary: sum, FixVersion: fv, Assignee: asg})
 	}
 	return out
 }
@@ -445,61 +459,31 @@ func fieldDuedate(fields map[string]any) string {
 	return ""
 }
 
-// dashTableLine is one output row: six columns (KEY, PRIORITY, STATUS, DUE, SUMMARY, ASSIGNEE).
+// dashTableLine is one output row (header, MAINT, or DIG) with cells aligned to colSpecs.
 type dashTableLine struct {
-	cells  [6]string
+	cells  []string
 	maint  bool
 	header bool
 }
 
-func printDashboard(w io.Writer, rows []Row, color bool) {
+func printDashboard(w io.Writer, rows []Row, color bool, colSpecs []columnSpec) {
 	var lines []dashTableLine
 	lines = append(lines, dashTableLine{
-		cells:  [6]string{"KEY", "PRIORITY", "STATUS", "DUE", "SUMMARY", "ASSIGNEE"},
+		cells:  dashTableHeaders(colSpecs),
 		header: true,
 	})
 	for _, r := range rows {
-		due := r.Due
-		if due == "" {
-			due = "—"
-		}
-		pri := r.Priority
-		if pri == "" {
-			pri = "—"
-		}
-		sum := truncRunes(r.Summary, maxSummaryRunes)
-		asg := r.Assignee
-		if asg == "" {
-			asg = "Unassigned"
-		}
 		lines = append(lines, dashTableLine{
-			cells: [6]string{r.Key, pri, r.Status, due, sum, asg},
+			cells: maintCells(r, colSpecs),
 			maint: true,
 		})
 		for _, d := range r.DIGs {
-			due := "—"
-			priD := d.Priority
-			if priD == "" {
-				priD = "—"
-			}
-			dSt := d.Status
-			if dSt == "" {
-				dSt = "—"
-			}
-			sumD := truncRunes(strings.TrimSpace(d.Summary), maxSummaryRunes)
-			if sumD == "" {
-				sumD = "—"
-			}
-			dAs := d.Assignee
-			if strings.TrimSpace(dAs) == "" {
-				dAs = "Unassigned"
-			}
 			lines = append(lines, dashTableLine{
-				cells: [6]string{"  " + d.Key, priD, dSt, due, sumD, dAs},
+				cells: digCells(d, colSpecs),
 			})
 		}
 	}
-	printPaddedTable(w, lines, color)
+	printPaddedTable(w, lines, color, colSpecs)
 }
 
 const (
@@ -509,7 +493,7 @@ const (
 	ansiWhiteOnRed = "\x1b[97;41m" // bright white on red background
 )
 
-func printPaddedTable(w io.Writer, lines []dashTableLine, color bool) {
+func printPaddedTable(w io.Writer, lines []dashTableLine, color bool, colSpecs []columnSpec) {
 	widths := colWidths(lines)
 	for _, ln := range lines {
 		s := buildPaddedLine(ln.cells, widths, dashColGap)
@@ -519,7 +503,7 @@ func printPaddedTable(w io.Writer, lines []dashTableLine, color bool) {
 		case ln.header:
 			_, _ = fmt.Fprintln(w, ansiBold+s+ansiReset)
 		case ln.maint:
-			_, _ = fmt.Fprintln(w, formatMaintsRowColored(ln.cells, widths, dashColGap))
+			_, _ = fmt.Fprintln(w, formatMaintsRowColored(ln.cells, colSpecs, widths, dashColGap))
 		default:
 			_, _ = fmt.Fprintln(w, s)
 		}
@@ -528,18 +512,19 @@ func printPaddedTable(w io.Writer, lines []dashTableLine, color bool) {
 }
 
 // formatMaintsRowColored is a red-foreground line for a MAINT row, with selected
-// cells in white on red: STATUS (index 2) for Open / AWAITING INPUT / TRIAGE, and
-// DUE (index 3) when the date is strictly before local today.
+// cells in white on red: STATUS for Open / AWAITING INPUT / TRIAGE, and DUE when
+// the date is strictly before local today. Column position follows colSpecs.
 // Only use when the outer table run has color (NO_COLOR is unset).
-func formatMaintsRowColored(cells [6]string, widths []int, gap string) string {
+func formatMaintsRowColored(cells []string, colSpecs []columnSpec, widths []int, gap string) string {
 	var b strings.Builder
 	b.WriteString(ansiRedFG)
-	for i := 0; i < 6; i++ {
+	for i := 0; i < len(cells) && i < len(widths) && i < len(colSpecs); i++ {
 		if i > 0 {
 			b.WriteString(gap)
 		}
 		pad := padCellToRunes(cells[i], widths[i])
-		highlight := (i == 2 && isMaintUrgentStatus(cells[2])) || (i == 3 && isPastDueCell(cells[3]))
+		k := colSpecs[i].id
+		highlight := (k == "status" && isMaintUrgentStatus(cells[i])) || (k == "due" && isPastDueCell(cells[i]))
 		if highlight {
 			b.WriteString(ansiReset)
 			b.WriteString(ansiWhiteOnRed)
@@ -611,21 +596,35 @@ func padCellToRunes(s string, w int) string {
 	return s
 }
 
+func dashCellOrDash(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "—"
+	}
+	return s
+}
+
 func colWidths(lines []dashTableLine) []int {
-	w := make([]int, 6)
+	if len(lines) == 0 {
+		return nil
+	}
+	n := len(lines[0].cells)
+	w := make([]int, n)
 	for _, ln := range lines {
-		for i := 0; i < 6; i++ {
-			if n := utf8.RuneCountInString(ln.cells[i]); n > w[i] {
-				w[i] = n
+		for i, cell := range ln.cells {
+			if i >= n {
+				break
+			}
+			if u := utf8.RuneCountInString(cell); u > w[i] {
+				w[i] = u
 			}
 		}
 	}
 	return w
 }
 
-func buildPaddedLine(cells [6]string, widths []int, gap string) string {
+func buildPaddedLine(cells []string, widths []int, gap string) string {
 	var b strings.Builder
-	for i := 0; i < 6; i++ {
+	for i := 0; i < len(cells) && i < len(widths); i++ {
 		if i > 0 {
 			b.WriteString(gap)
 		}
