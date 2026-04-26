@@ -52,8 +52,8 @@ func TestEffectiveDashJQL(t *testing.T) {
 	if err != nil || j != "foo" {
 		t.Fatalf("jql: %q %v", j, err)
 	}
-	_, err = effectiveDashJQL(Options{JQL: "a", User: "b"})
-	if err == nil || !strings.Contains(err.Error(), "either --jql or --user") {
+	_, err = effectiveDashJQL(Options{JQL: "a", Assignee: "b"})
+	if err == nil || !strings.Contains(err.Error(), "either --jql or --assignee") {
 		t.Fatalf("expected mutual exclusion: %v", err)
 	}
 }
