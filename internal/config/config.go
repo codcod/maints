@@ -32,7 +32,7 @@ func Load() (*Config, error) {
 }
 
 // LoadJiraOnly reads the same sources as Load but validates only Jira credentials.
-// Use for commands that do not need CURSOR_API_KEY (e.g. maints dig).
+// Use for commands that do not need CURSOR_API_KEY (e.g. maints dig, maints dash).
 func LoadJiraOnly() (*Config, error) {
 	_ = godotenv.Load()
 

@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/codcod/maints-triage/internal/config"
+	"github.com/codcod/maints-triage/internal/dash"
 	"github.com/codcod/maints-triage/internal/dig"
 	"github.com/codcod/maints-triage/internal/jira"
 	"github.com/codcod/maints-triage/internal/server"
@@ -37,7 +38,54 @@ Use "maints <command> --help" for details on a specific command.`,
 	root.AddCommand(newTriageCmd())
 	root.AddCommand(newServeCmd())
 	root.AddCommand(newDigCmd())
+	root.AddCommand(newDashCmd())
 	return root
+}
+
+func newDashCmd() *cobra.Command {
+	var (
+		jql        string
+		digProject string
+		linkType   string
+		user       string
+		debug      bool
+	)
+	cmd := &cobra.Command{
+		Use:   "dash",
+		Short: "Print a terminal dashboard of your MAINT Flow issues and linked DIG work",
+		Long: `dash runs a fixed JQL (overridable with --jql) to list your MAINT Flow
+tickets, then for each one shows linked DIG issues connected with the same link
+type used by "maints dig" (default "Solved by", or $JIRA_LINK_TYPE).
+
+You can also target another assignee with --user (same built-in JQL, but
+assignee = the given string). Do not use --user together with --jql.
+
+Requires Jira credentials only (no cursor-agent).`,
+		Example: `  maints dash
+  maints dash --user colleague@example.com
+  maints dash --dig-project DIG
+  maints dash --jql 'project = MAINT AND assignee = currentUser() ORDER BY created ASC'`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, err := config.LoadJiraOnly()
+			if err != nil {
+				return err
+			}
+			client := jira.NewClient(cfg.JiraURL, cfg.JiraUsername, cfg.JiraAPIToken)
+			return dash.Run(cmd.Context(), client, cmd.OutOrStdout(), cmd.ErrOrStderr(), dash.Options{
+				JQL:        jql,
+				DigProject: digProject,
+				LinkType:   linkType,
+				User:       user,
+				Debug:      debug,
+			})
+		},
+	}
+	cmd.Flags().StringVar(&jql, "jql", "", "override the default JQL (see docs/dash.md for the built-in query; mutually exclusive with --user)")
+	cmd.Flags().StringVar(&user, "user", "", "built-in JQL: filter assignee to this Jira user (email, name, or id; mutually exclusive with --jql)")
+	cmd.Flags().StringVar(&digProject, "dig-project", "DIG", "Jira project key for linked work items (e.g. DIG)")
+	cmd.Flags().StringVar(&linkType, "link-type", "", `issue link name to follow (default: $JIRA_LINK_TYPE or "Solved by")`)
+	cmd.Flags().BoolVar(&debug, "debug", false, "print each issue's issuelinks (type names, keys) to stderr")
+	return cmd
 }
 
 func newDigCmd() *cobra.Command {

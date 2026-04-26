@@ -1,6 +1,6 @@
 # The Triage Process
 
-This document describes in detail how the automated maintenance ticket triage process works in the `maints` CLI (`maints triage`).
+This document describes in detail how the automated maintenance ticket triage process works in the `maints` CLI (`maints triage` and `maints serve`).
 
 ## 1. Overview
 
@@ -23,7 +23,7 @@ The triage process is orchestrated by a Go application (`internal/triage`) and e
 
 ## 3. The Triage Workflow
 
-When `maints triage` runs for a given set of Jira issue keys, it executes the following steps concurrently:
+When `maints triage` or `maints serve` runs for a given set of Jira issue keys, it executes the following steps:
 
 ### Step A: Data Fetching and Setup
 
