@@ -76,19 +76,19 @@ type TriageOutcome struct {
 // triageDeps groups the resolved dependencies shared across triageOne calls.
 type triageDeps struct {
 	checklistData  []byte
-	kbIndexData    []byte // optional; nil when kb-index.md is not present in TRIAGE_HOME
+	kbIndexData    []byte // optional; nil when kb-index.md is not present in maints config dir
 	promptTemplate []byte
 	mappings       []jira.FieldMapping
 	jiraClient     *jira.Client
 	apiKey         string
 }
 
-// triageHome returns the triage configuration directory, in priority order:
-//  1. $TRIAGE_HOME if set
-//  2. $XDG_CONFIG_HOME/triage  (falls back to ~/.config/triage)
-func triageHome() (string, error) {
-	if th := os.Getenv("TRIAGE_HOME"); th != "" {
-		return th, nil
+// maintsConfigDir returns the maints configuration directory, in priority order:
+//  1. $MAINTS_HOME if set
+//  2. $XDG_CONFIG_HOME/maints  (falls back to ~/.config/maints)
+func maintsConfigDir() (string, error) {
+	if d := os.Getenv("MAINTS_HOME"); d != "" {
+		return d, nil
 	}
 	xdgConfigHome := os.Getenv("XDG_CONFIG_HOME")
 	if xdgConfigHome == "" {
@@ -98,18 +98,18 @@ func triageHome() (string, error) {
 		}
 		xdgConfigHome = filepath.Join(home, ".config")
 	}
-	return filepath.Join(xdgConfigHome, "triage"), nil
+	return filepath.Join(xdgConfigHome, "maints"), nil
 }
 
-// loadKBIndex reads the optional kb-index.md from triage home.
+// loadKBIndex reads the optional kb-index.md from the maints config directory.
 // If the file does not exist nil is returned without error; callers should
 // treat a nil result as "no knowledge base index available".
 func loadKBIndex() ([]byte, error) {
-	th, err := triageHome()
+	cfgDir, err := maintsConfigDir()
 	if err != nil {
 		return nil, err
 	}
-	p := filepath.Join(th, defaultKBIndexFile)
+	p := filepath.Join(cfgDir, defaultKBIndexFile)
 	data, err := os.ReadFile(p)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -120,14 +120,14 @@ func loadKBIndex() ([]byte, error) {
 	return data, nil
 }
 
-// loadFieldsMappings reads the optional fields-mapping.json from triage home.
+// loadFieldsMappings reads the optional fields-mapping.json from the maints config directory.
 // If the file does not exist an empty slice is returned without error.
 func loadFieldsMappings() ([]jira.FieldMapping, error) {
-	th, err := triageHome()
+	cfgDir, err := maintsConfigDir()
 	if err != nil {
 		return nil, err
 	}
-	p := filepath.Join(th, "fields-mapping.json")
+	p := filepath.Join(cfgDir, "fields-mapping.json")
 	data, err := os.ReadFile(p)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -144,22 +144,22 @@ func loadFieldsMappings() ([]jira.FieldMapping, error) {
 
 // resolveConfigFile returns the path for a named config file, in priority order:
 //  1. explicit override value (non-empty)
-//  2. $TRIAGE_HOME/<name>  (defaults to $XDG_CONFIG_HOME/triage/<name>)
+//  2. $MAINTS_HOME/<name>  (defaults to $XDG_CONFIG_HOME/maints/<name>)
 //  3. ./<name>
 func resolveConfigFile(explicit, name string) (string, error) {
 	if explicit != "" {
 		return explicit, nil
 	}
 
-	th, err := triageHome()
+	cfgDir, err := maintsConfigDir()
 	if err != nil {
 		return "", err
 	}
-	thPath := filepath.Join(th, name)
-	if _, err := os.Stat(thPath); err == nil {
-		return thPath, nil
+	configPath := filepath.Join(cfgDir, name)
+	if _, err := os.Stat(configPath); err == nil {
+		return configPath, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("stat %q: %w", thPath, err)
+		return "", fmt.Errorf("stat %q: %w", configPath, err)
 	}
 
 	return name, nil
@@ -167,7 +167,7 @@ func resolveConfigFile(explicit, name string) (string, error) {
 
 // resolveChecklist returns the checklist path to use, in priority order:
 //  1. explicit --checklist flag value
-//  2. $TRIAGE_HOME/checklist.md  (defaults to $XDG_CONFIG_HOME/triage/checklist.md)
+//  2. $MAINTS_HOME/checklist.md  (defaults to $XDG_CONFIG_HOME/maints/checklist.md)
 //  3. ./checklist.md
 func resolveChecklist(explicit string) (string, error) {
 	return resolveConfigFile(explicit, defaultChecklistFile)
@@ -175,7 +175,7 @@ func resolveChecklist(explicit string) (string, error) {
 
 // resolvePrompt returns the prompt template path to use, in priority order:
 //  1. explicit --prompt flag value
-//  2. $TRIAGE_HOME/triage-prompt.md  (defaults to $XDG_CONFIG_HOME/triage/triage-prompt.md)
+//  2. $MAINTS_HOME/triage-prompt.md  (defaults to $XDG_CONFIG_HOME/maints/triage-prompt.md)
 //  3. ./triage-prompt.md
 func resolvePrompt(explicit string) (string, error) {
 	return resolveConfigFile(explicit, defaultPromptFile)
