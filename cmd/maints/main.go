@@ -14,6 +14,7 @@ import (
 	"github.com/codcod/maints-triage/internal/fixversion"
 	"github.com/codcod/maints-triage/internal/jira"
 	"github.com/codcod/maints-triage/internal/open"
+	"github.com/codcod/maints-triage/internal/release"
 	"github.com/codcod/maints-triage/internal/server"
 	"github.com/codcod/maints-triage/internal/triage"
 )
@@ -43,6 +44,7 @@ Use "maints <command> --help" for details on a specific command.`,
 	root.AddCommand(newDashCmd())
 	root.AddCommand(newOpenCmd())
 	root.AddCommand(newFixVersionCmd())
+	root.AddCommand(newReleaseCmd())
 	return root
 }
 
@@ -271,6 +273,61 @@ Example:
 	cmd.Flags().StringVar(&digProject, "dig-project", "DIG", "project key to validate command-line and query results (e.g. DIG)")
 	cmd.Flags().StringVar(&maintProject, "maint-project", "MAINT", "key prefix of MAINT to comment on (e.g. MAINT)")
 	_ = cmd.MarkFlagRequired("version")
+	return cmd
+}
+
+func newReleaseCmd() *cobra.Command {
+	var (
+		digProject   string
+		maintProject string
+		linkType     string
+		supervisor   bool
+	)
+	cmd := &cobra.Command{
+		Use:   "release [FIX_VERSION]",
+		Short: "After a patch release, update linked MAINTs (comments; close when all DIGs are done)",
+		Long: `release finds all DIG issues with the given fix version (project = DIG and fixVersion = the argument).
+It first checks Jira: the fix version must exist on the DIG project and be marked Released (not only unreleased).
+
+For each DIG that is Done or Closed, it looks up the linked MAINT (same "Solved by" link as maints dig and maints dash)
+and for each such MAINT (once per key):
+
+- If every DIG linked to that MAINT with the same link type is Done or Closed, the MAINT is
+  transitioned to status Done (resolution "Done" when the workflow allows it) and a comment
+  is added: "All patches have been released now, closing."
+  By default, closing is only performed when the MAINT is assigned to the authenticated Jira user
+  (the same as JQL currentUser()). Use --supervisor to allow closing MAINTs with any assignee.
+- If any of those DIGs are still not Done/Closed, a comment is added:
+  "Patch <fix version> has been released, keeping MAINT open until all patches are released."
+
+DIG issues in the fix version that are not Done or Closed produce a warning and are skipped for
+MAINT follow-up (so their MAINTs are not considered from that DIG).
+
+Requires: JIRA_URL, JIRA_USERNAME, JIRA_API_TOKEN.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.LoadJiraOnly()
+			if err != nil {
+				return err
+			}
+			lt := strings.TrimSpace(linkType)
+			if lt == "" {
+				lt = dig.DefaultLinkType()
+			}
+			client := jira.NewClient(cfg.JiraURL, cfg.JiraUsername, cfg.JiraAPIToken)
+			return release.Run(cmd.Context(), client, release.Options{
+				FixVersion:   args[0],
+				DigProject:   digProject,
+				MaintProject: maintProject,
+				LinkType:     lt,
+				Supervisor:   supervisor,
+			}, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		},
+	}
+	cmd.Flags().StringVar(&linkType, "link-type", "", `issue link to MAINT (default: $JIRA_LINK_TYPE or "Solved by")`)
+	cmd.Flags().StringVar(&digProject, "dig-project", "DIG", "Jira project key for DIG (fix version scope)")
+	cmd.Flags().StringVar(&maintProject, "maint-project", "MAINT", "key prefix of MAINT to update")
+	cmd.Flags().BoolVar(&supervisor, "supervisor", false, "allow closing MAINTs not assigned to the current user (default: only close your MAINTs)")
 	return cmd
 }
 
