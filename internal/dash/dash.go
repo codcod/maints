@@ -64,8 +64,8 @@ type Options struct {
 	JQL        string
 	DigProject string
 	LinkType   string
-	// User, when set, selects the default JQL for that assignee (use with the built-in query, not with --jql).
-	User string
+	// Assignee, when set, selects the default JQL for that assignee (use with the built-in query, not with --jql).
+	Assignee string
 	// Debug prints issuelink metadata to errW (link types, keys) for troubleshooting.
 	Debug bool
 	// Columns is a comma-separated list of column names (e.g. key, priority, due). Empty means all default columns.
@@ -152,18 +152,18 @@ func useColor() bool {
 	return os.Getenv("NO_COLOR") == ""
 }
 
-// effectiveDashJQL resolves --jql, --user, and the default query (mutually exclusive: --jql vs --user).
+// effectiveDashJQL resolves --jql, --assignee, and the default query (mutually exclusive: --jql vs --assignee).
 func effectiveDashJQL(o Options) (string, error) {
 	jqlIn := strings.TrimSpace(o.JQL)
-	userIn := strings.TrimSpace(o.User)
-	if jqlIn != "" && userIn != "" {
-		return "", fmt.Errorf("use either --jql or --user, not both")
+	assigneeIn := strings.TrimSpace(o.Assignee)
+	if jqlIn != "" && assigneeIn != "" {
+		return "", fmt.Errorf("use either --jql or --assignee, not both")
 	}
 	if jqlIn != "" {
 		return jqlIn, nil
 	}
-	if userIn != "" {
-		return DefaultJQLForAssignee(userIn), nil
+	if assigneeIn != "" {
+		return DefaultJQLForAssignee(assigneeIn), nil
 	}
 	return DefaultJQL, nil
 }
@@ -464,6 +464,9 @@ type dashTableLine struct {
 	cells  []string
 	maint  bool
 	header bool
+	// dig is true for linked DIG sub-rows under a MAINT.
+	dig        bool
+	digSettled bool // Done or Closed: render STATUS cell white on green when color is on
 }
 
 func printDashboard(w io.Writer, rows []Row, color bool, colSpecs []columnSpec) {
@@ -479,7 +482,9 @@ func printDashboard(w io.Writer, rows []Row, color bool, colSpecs []columnSpec) 
 		})
 		for _, d := range r.DIGs {
 			lines = append(lines, dashTableLine{
-				cells: digCells(d, colSpecs),
+				cells:      digCells(d, colSpecs),
+				dig:        true,
+				digSettled: isDigSettledStatus(d.Status),
 			})
 		}
 	}
@@ -487,10 +492,11 @@ func printDashboard(w io.Writer, rows []Row, color bool, colSpecs []columnSpec) 
 }
 
 const (
-	ansiRedFG      = "\x1b[31m"
-	ansiReset      = "\x1b[0m"
-	ansiBold       = "\x1b[1m"
-	ansiWhiteOnRed = "\x1b[97;41m" // bright white on red background
+	ansiRedFG        = "\x1b[31m"
+	ansiReset        = "\x1b[0m"
+	ansiBold         = "\x1b[1m"
+	ansiWhiteOnRed   = "\x1b[97;41m"   // bright white on red background
+	ansiWhiteOnGreen = "\x1b[97;42m"   // bright white on green background (Done/Closed DIG)
 )
 
 func printPaddedTable(w io.Writer, lines []dashTableLine, color bool, colSpecs []columnSpec) {
@@ -504,11 +510,39 @@ func printPaddedTable(w io.Writer, lines []dashTableLine, color bool, colSpecs [
 			_, _ = fmt.Fprintln(w, ansiBold+s+ansiReset)
 		case ln.maint:
 			_, _ = fmt.Fprintln(w, formatMaintsRowColored(ln.cells, colSpecs, widths, dashColGap))
+		case ln.dig && ln.digSettled:
+			_, _ = fmt.Fprintln(w, formatDigSettledRow(ln.cells, colSpecs, widths, dashColGap))
 		default:
 			_, _ = fmt.Fprintln(w, s)
 		}
 	}
 	_, _ = fmt.Fprintln(w)
+}
+
+// isDigSettledStatus is true for DIG Jira statuses shown as complete in the dash.
+func isDigSettledStatus(s string) bool {
+	s = strings.TrimSpace(s)
+	return strings.EqualFold(s, "Done") || strings.EqualFold(s, "Closed")
+}
+
+// formatDigSettledRow is a DIG sub-row with the STATUS cell in white on green (Done/Closed only);
+// other cells are uncolored. If the table omits the status column, no cell is highlighted.
+func formatDigSettledRow(cells []string, colSpecs []columnSpec, widths []int, gap string) string {
+	var b strings.Builder
+	for i := 0; i < len(cells) && i < len(widths) && i < len(colSpecs); i++ {
+		if i > 0 {
+			b.WriteString(gap)
+		}
+		pad := padCellToRunes(cells[i], widths[i])
+		if colSpecs[i].id == "status" {
+			b.WriteString(ansiWhiteOnGreen)
+			b.WriteString(pad)
+			b.WriteString(ansiReset)
+		} else {
+			b.WriteString(pad)
+		}
+	}
+	return b.String()
 }
 
 // formatMaintsRowColored is a red-foreground line for a MAINT row, with selected

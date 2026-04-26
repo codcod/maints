@@ -10,7 +10,7 @@ Link names for related DIG work default the same way as `maints dig`: `JIRA_LINK
 
 ## Default JQL
 
-If you do not pass `--jql` or `--user`, `maints dash` uses the following query:
+If you do not pass `--jql` or `--assignee`, `maints dash` uses the following query:
 
 ```jql
 project = MAINT AND "Maint Component[Select List (cascading)]" IN cascadeOption(Flow)
@@ -36,8 +36,8 @@ Link matching checks `type.name`, `inward`, and `outward` descriptions, includin
 
 ## Flags
 
-- `--jql`: Replace the default JQL entirely (mutually exclusive with `--user`).
-- `--user`: Use the built-in MAINT-Flow JQL, but filter `assignee` to this value (Jira user email, display string, or id). Mutually exclusive with `--jql`.
+- `--jql`: Replace the default JQL entirely (mutually exclusive with `--assignee`).
+- `--assignee`: Use the built-in MAINT-Flow JQL, but filter `assignee` to this value (Jira user email, display string, or id). Mutually exclusive with `--jql`.
 - `--dig-project`: Project key for "DIG" work items (default `DIG`).
 - `--link-type`: Link type name in Jira (default from env or `Solved by`).
 - `--columns`: Comma‑separated column names (case‑insensitive; optional spaces). Allowed names: `key`, `priority`, `status`, `due`, `summary`, `fixversion` (also `fix_version` or `fix-version`); `assignee`. The **summary** column defaults to 50 runes; use `summary[N]` to cap at `N` runes (e.g. `summary[20]`). Only `summary` may use a `[N]` suffix. Example: `--columns "key, summary[20], priority"`.
@@ -47,7 +47,7 @@ Link matching checks `type.name`, `inward`, and `outward` descriptions, includin
 
 ```bash
 maints dash
-maints dash --user colleague@example.com
+maints dash --assignee colleague@example.com
 maints dash --columns "key, priority, due"
 maints dash --columns "key, summary[20], fixversion, assignee"
 maints dash --dig-project DIG --link-type "Solved by"

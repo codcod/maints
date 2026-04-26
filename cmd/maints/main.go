@@ -81,7 +81,7 @@ func newDashCmd() *cobra.Command {
 		jql        string
 		digProject string
 		linkType   string
-		user       string
+		assignee   string
 		columns    string
 		debug      bool
 	)
@@ -92,12 +92,12 @@ func newDashCmd() *cobra.Command {
 tickets, then for each one shows linked DIG issues connected with the same link
 type used by "maints dig" (default "Solved by", or $JIRA_LINK_TYPE).
 
-You can also target another assignee with --user (same built-in JQL, but
-assignee = the given string). Do not use --user together with --jql.
+You can also target another assignee with --assignee (same built-in JQL, but
+assignee = the given string). Do not use --assignee together with --jql.
 
 Requires Jira credentials only (no cursor-agent).`,
 		Example: `  maints dash
-  maints dash --user colleague@example.com
+  maints dash --assignee colleague@example.com
   maints dash --columns "key, priority, due"
   maints dash --columns "key, summary[20], fixversion, assignee"
   maints dash --dig-project DIG
@@ -112,14 +112,14 @@ Requires Jira credentials only (no cursor-agent).`,
 				JQL:        jql,
 				DigProject: digProject,
 				LinkType:   linkType,
-				User:       user,
+				Assignee:   assignee,
 				Columns:    columns,
 				Debug:      debug,
 			})
 		},
 	}
-	cmd.Flags().StringVar(&jql, "jql", "", "override the default JQL (see docs/dash.md for the built-in query; mutually exclusive with --user)")
-	cmd.Flags().StringVar(&user, "user", "", "built-in JQL: filter assignee to this Jira user (email, name, or id; mutually exclusive with --jql)")
+	cmd.Flags().StringVar(&jql, "jql", "", "override the default JQL (see docs/dash.md for the built-in query; mutually exclusive with --assignee)")
+	cmd.Flags().StringVar(&assignee, "assignee", "", "built-in JQL: filter assignee to this Jira user (email, name, or id; mutually exclusive with --jql)")
 	cmd.Flags().StringVar(&digProject, "dig-project", "DIG", "Jira project key for linked work items (e.g. DIG)")
 	cmd.Flags().StringVar(&linkType, "link-type", "", `issue link name to follow (default: $JIRA_LINK_TYPE or "Solved by")`)
 	cmd.Flags().StringVar(&columns, "columns", "", `comma-separated column names: key, priority, status, due, summary, fixversion, assignee (default: all, in that order; case-insensitive). Use summary[N] for a custom max width in runes (e.g. summary[20]); default is 50`)
