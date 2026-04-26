@@ -48,7 +48,7 @@ jobs:
           shasum -a 256 triage-${{ github.ref_name }}-darwin-universal.tar.gz > triage-${{ github.ref_name }}-darwin-universal.tar.gz.sha256
 
       - name: Create draft release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
           generate_release_notes: true
