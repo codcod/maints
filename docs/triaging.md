@@ -1,10 +1,10 @@
 # The Triage Process
 
-This document describes in detail how the automated maintenance ticket triage process works in `maints-triage`.
+This document describes in detail how the automated maintenance ticket triage process works in the `maints` CLI (`maints triage`).
 
 ## 1. Overview
 
-The `maints-triage` tool automates the initial evaluation of Jira maintenance tickets. When a new defect is reported by an internal team or a customer, an AI agent evaluates the ticket's quality, completeness, and validity to determine the appropriate next step:
+The `maints` tool automates the initial evaluation of Jira maintenance tickets. When a new defect is reported by an internal team or a customer, an AI agent evaluates the ticket's quality, completeness, and validity to determine the appropriate next step:
 
 - **Accept**: The ticket is a valid defect and contains enough context to begin engineering analysis.
 - **Reject**: The ticket is not a valid defect (e.g., it is a feature request, a question, targets an unsupported version, or describes expected product behavior).
@@ -23,7 +23,7 @@ The triage process is orchestrated by a Go application (`internal/triage`) and e
 
 ## 3. The Triage Workflow
 
-When `maints-triage` runs for a given set of Jira issue keys, it executes the following steps concurrently:
+When `maints triage` runs for a given set of Jira issue keys, it executes the following steps concurrently:
 
 ### Step A: Data Fetching and Setup
 

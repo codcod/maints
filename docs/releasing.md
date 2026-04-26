@@ -28,5 +28,5 @@ The project uses GitHub Actions to automate the release process. A workflow is t
 ## Artifacts
 
 The release will include:
--   `triage-vX.Y.Z-darwin-universal.tar.gz`: The universal macOS binary.
--   `triage-vX.Y.Z-darwin-universal.tar.gz.sha256`: The checksum file.
+-   `maints-vX.Y.Z-darwin-universal.tar.gz`: The universal macOS binary.
+-   `maints-vX.Y.Z-darwin-universal.tar.gz.sha256`: The checksum file.
