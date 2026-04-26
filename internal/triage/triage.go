@@ -83,22 +83,10 @@ type triageDeps struct {
 	apiKey         string
 }
 
-// triageHome returns the triage configuration directory, in priority order:
-//  1. $TRIAGE_HOME if set
-//  2. $XDG_CONFIG_HOME/triage  (falls back to ~/.config/triage)
+// triageHome returns the triage configuration directory.
+// It delegates to config.TriageHome so that all packages share one implementation.
 func triageHome() (string, error) {
-	if th := os.Getenv("TRIAGE_HOME"); th != "" {
-		return th, nil
-	}
-	xdgConfigHome := os.Getenv("XDG_CONFIG_HOME")
-	if xdgConfigHome == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("resolve home directory: %w", err)
-		}
-		xdgConfigHome = filepath.Join(home, ".config")
-	}
-	return filepath.Join(xdgConfigHome, "triage"), nil
+	return config.TriageHome()
 }
 
 // loadKBIndex reads the optional kb-index.md from triage home.
