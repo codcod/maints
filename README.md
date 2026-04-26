@@ -1,8 +1,11 @@
 # MAINTs CLI (`maints`)
 
-A Jira maintenance toolkit: `maints triage` and `maints serve` use an AI agent to
-evaluate issues; `maints dig` copies issues to another project with team and
-links. Each command is documented in `docs/`.
+A Jira maintenance toolkit:
+- `maints triage` and `maints serve` use an AI agent to evaluate issues.
+- `maints dig` copies issues to another project with team and links.
+- `maints dash` lists your MAINT issues and related DIG work in the terminal.
+
+Each command is documented in the `docs/` folder.
 
 ## Installation
 
@@ -16,7 +19,6 @@ brew install maints
 ### From source
 
 #### Prerequisites
-
 - Go 1.25+
 
 #### Install
@@ -28,7 +30,6 @@ go install ./cmd/maints
 ```
 
 Verify:
-
 ```bash
 maints --version
 maints --help
@@ -39,13 +40,10 @@ maints --help
 To build a binary in the current directory (without `go install` to `$GOPATH/bin`):
 
 ```bash
-git clone https://github.com/codcod/maints-triage.git
-cd maints-triage
 go build -o maints ./cmd/maints
 ```
 
 With `just` (binary version follows the current git tag):
-
 ```bash
 just build
 ```
@@ -54,19 +52,29 @@ Builds with no git context report `dev` as the version.
 
 ## Configuration
 
-Set environment variables or use a **`.env`** file in the working directory.
+Set environment variables or use a **`.env`** file in the working directory. Copy the template to get started: `cp .env.example .env`
 
-1. Copy the template: `cp .env.example .env`
-2. Fill in only what the commands you run need — requirements differ by command; see
-   - [`docs/triage.md`](docs/triage.md) — Jira, Cursor agent, `MAINTS_HOME`, and files such as `checklist.md`
-   - [`docs/serve.md`](docs/serve.md) — same agent/triage layer as `triage`, plus Jira polling
-   - [`docs/dig.md`](docs/dig.md) — Jira, team field, and link settings
+### Global Jira Settings (used by all commands)
+- `JIRA_URL`: Jira base URL (e.g., `https://your-company.atlassian.net`)
+- `JIRA_USERNAME`: Jira account email
+- `JIRA_API_TOKEN`: Jira API token
 
-## General usage
+### Agent Settings (used by `triage` and `serve`)
+- `CURSOR_API_KEY`: API key for `cursor-agent`
+- `MAINTS_HOME`: Optional directory for configuration files (defaults to `$XDG_CONFIG_HOME/maints` or `~/.config/maints/`)
+
+### Dig Settings (used by `dig` and `dash`)
+- `JIRA_TEAM_FIELD`: Custom field ID for Team (e.g., `customfield_14700`) (Required for `dig`)
+- `JIRA_TEAM_ID`: Atlassian team UUID (Required for `dig`)
+- `JIRA_DIG_ISSUE_TYPE`: Default target issue type (default: `Bug`)
+- `JIRA_LINK_TYPE`: Default link type (default: `Solved by`)
+
+## Commands
 
 - **[`maints triage`](docs/triage.md)** — Run AI triage on one or more Jira issues.
 - **[`maints serve`](docs/serve.md)** — Poll Jira and triage new issues automatically.
 - **[`maints dig`](docs/dig.md)** — Duplicate issues into another project with team and links.
+- **[`maints dash`](docs/dash.md)** — List your MAINT Flow issues and linked DIG tickets in the terminal.
 
 ```bash
 maints --help
