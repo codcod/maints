@@ -125,10 +125,10 @@ func Run(ctx context.Context, client *jira.Client, opts Options, out, errOut io.
 
 		browse := fmt.Sprintf("%s/browse/%s", client.BaseURL(), k)
 		fields := map[string]any{
-			"project":     map[string]string{"key": opts.DigProject},
-			"issuetype":   map[string]string{"name": opts.IssueType},
-			"summary":     info.Summary,
-			"description": duplicateDescriptionADF(k, browse),
+			"project":      map[string]string{"key": opts.DigProject},
+			"issuetype":    map[string]string{"name": opts.IssueType},
+			"summary":      info.Summary,
+			"description":  duplicateDescriptionADF(k, browse),
 			opts.TeamField: strings.TrimSpace(opts.TeamID),
 		}
 		if info.AccountID != "" {

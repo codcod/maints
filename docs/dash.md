@@ -21,7 +21,7 @@ ORDER BY priority, created asc
 
 ## Output
 
-The table has six columns: **KEY** (indented for linked DIGs), **PRIORITY**, **STATUS**, **DUE** (`—` for DIGs), **SUMMARY** (truncated to 50 runes for MAINT and DIG lines), and **ASSIGNEE** (last column). 
+By default the table includes these columns, in order: **KEY** (indented for linked DIGs), **PRIORITY**, **STATUS**, **DUE** (`—` for DIGs), **SUMMARY** (truncated to 50 runes for MAINT and DIG lines), **FIXVERSION** (Jira `fixVersions` names, comma‑separated when there are several), and **ASSIGNEE**. Use `--columns` to list only the columns you want, in the order you list them (see [Flags](#flags)). For **SUMMARY**, the default max width is 50 runes; add a bracketed number to set a different max (e.g. `SUMMARY[20]` in the header when you pass `summary[20]`). Empty fix versions show as `—`. 
 
 Styling details:
 - The header line is **bold**.
@@ -40,6 +40,7 @@ Link matching checks `type.name`, `inward`, and `outward` descriptions, includin
 - `--user`: Use the built-in MAINT-Flow JQL, but filter `assignee` to this value (Jira user email, display string, or id). Mutually exclusive with `--jql`.
 - `--dig-project`: Project key for "DIG" work items (default `DIG`).
 - `--link-type`: Link type name in Jira (default from env or `Solved by`).
+- `--columns`: Comma‑separated column names (case‑insensitive; optional spaces). Allowed names: `key`, `priority`, `status`, `due`, `summary`, `fixversion` (also `fix_version` or `fix-version`); `assignee`. The **summary** column defaults to 50 runes; use `summary[N]` to cap at `N` runes (e.g. `summary[20]`). Only `summary` may use a `[N]` suffix. Example: `--columns "key, summary[20], priority"`.
 - `--debug`: Print `issuelinks` type names and keys to stderr (no secret data).
 
 ## Examples
@@ -47,6 +48,8 @@ Link matching checks `type.name`, `inward`, and `outward` descriptions, includin
 ```bash
 maints dash
 maints dash --user colleague@example.com
+maints dash --columns "key, priority, due"
+maints dash --columns "key, summary[20], fixversion, assignee"
 maints dash --dig-project DIG --link-type "Solved by"
 maints dash --jql 'project = MAINT AND assignee = currentUser() ORDER BY created ASC'
 ```

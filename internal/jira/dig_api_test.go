@@ -55,9 +55,9 @@ func TestSearchIssueKeysPOST_pagination(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if calls == 1 {
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"issues":         []any{map[string]any{"key": "A-1"}},
-				"isLast":         false,
-				"nextPageToken":  "tok2",
+				"issues":        []any{map[string]any{"key": "A-1"}},
+				"isLast":        false,
+				"nextPageToken": "tok2",
 			})
 			return
 		}

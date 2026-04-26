@@ -208,9 +208,9 @@ func (c *Client) CreateIssue(ctx context.Context, fields map[string]any) (string
 // CreateIssueLink creates a directed issue link between two keys (outward → inward per Jira semantics).
 func (c *Client) CreateIssueLink(ctx context.Context, linkTypeName, outwardKey, inwardKey string) error {
 	payload := map[string]any{
-		"type":           map[string]string{"name": linkTypeName},
-		"outwardIssue":   map[string]string{"key": outwardKey},
-		"inwardIssue":    map[string]string{"key": inwardKey},
+		"type":         map[string]string{"name": linkTypeName},
+		"outwardIssue": map[string]string{"key": outwardKey},
+		"inwardIssue":  map[string]string{"key": inwardKey},
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
