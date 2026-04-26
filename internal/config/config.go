@@ -31,6 +31,36 @@ func Load() (*Config, error) {
 	return cfg, cfg.validate()
 }
 
+// LoadJiraOnly reads the same sources as Load but validates only Jira credentials.
+// Use for commands that do not need CURSOR_API_KEY (e.g. maints dig).
+func LoadJiraOnly() (*Config, error) {
+	_ = godotenv.Load()
+
+	cfg := &Config{
+		JiraURL:      os.Getenv("JIRA_URL"),
+		JiraUsername: os.Getenv("JIRA_USERNAME"),
+		JiraAPIToken: os.Getenv("JIRA_API_TOKEN"),
+	}
+	return cfg, cfg.validateJiraOnly()
+}
+
+func (c *Config) validateJiraOnly() error {
+	var missing []string
+	if c.JiraURL == "" {
+		missing = append(missing, "JIRA_URL")
+	}
+	if c.JiraUsername == "" {
+		missing = append(missing, "JIRA_USERNAME")
+	}
+	if c.JiraAPIToken == "" {
+		missing = append(missing, "JIRA_API_TOKEN")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required environment variables:\n  %s", strings.Join(missing, "\n  "))
+	}
+	return nil
+}
+
 func (c *Config) validate() error {
 	var missing []string
 	if c.JiraURL == "" {

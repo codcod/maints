@@ -21,7 +21,7 @@ The project uses GitHub Actions to automate the release process. A workflow is t
 
 3.  **Review and Publish**:
     Once the workflow completes, a new **Draft Release** will be created on GitHub.
-    -   Go to the [Releases page](https://github.com/yourusername/triager/releases).
+    -   Go to the [Releases page](https://github.com/codcod/maints-triage/releases).
     -   Edit the draft release to review the auto-generated release notes.
     -   Publish the release when ready.
 

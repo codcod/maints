@@ -5,6 +5,29 @@ import (
 	"testing"
 )
 
+func TestValidateJiraOnly(t *testing.T) {
+	t.Run("all jira fields present", func(t *testing.T) {
+		cfg := Config{
+			JiraURL:      "https://example.atlassian.net",
+			JiraUsername: "user@example.com",
+			JiraAPIToken: "token123",
+		}
+		if err := cfg.validateJiraOnly(); err != nil {
+			t.Fatalf("validateJiraOnly() = %v", err)
+		}
+	})
+	t.Run("missing token", func(t *testing.T) {
+		cfg := Config{
+			JiraURL:      "https://example.atlassian.net",
+			JiraUsername: "user@example.com",
+		}
+		err := cfg.validateJiraOnly()
+		if err == nil || !strings.Contains(err.Error(), "JIRA_API_TOKEN") {
+			t.Fatalf("expected error mentioning JIRA_API_TOKEN, got %v", err)
+		}
+	})
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string

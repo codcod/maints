@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/codcod/maints-triage/internal/config"
+	"github.com/codcod/maints-triage/internal/dig"
+	"github.com/codcod/maints-triage/internal/jira"
 	"github.com/codcod/maints-triage/internal/server"
 	"github.com/codcod/maints-triage/internal/triage"
 )
@@ -34,7 +36,90 @@ Use "maints <command> --help" for details on a specific command.`,
 	}
 	root.AddCommand(newTriageCmd())
 	root.AddCommand(newServeCmd())
+	root.AddCommand(newDigCmd())
 	return root
+}
+
+func newDigCmd() *cobra.Command {
+	var (
+		query        string
+		digProject   string
+		issueType    string
+		linkType     string
+		linkSwapEnds bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "dig [ISSUE-KEY]...",
+		Short: "Duplicate Jira issues into DIG (or another project) with team and issue link",
+		Long: `dig mirrors each source issue into the target project (default DIG): same summary,
+a duplicate notice with the source issue key linked to the MAINT browse URL, the team
+from JIRA_TEAM_ID on JIRA_TEAM_FIELD, the same assignee when present, and an issue link
+(default type "Solved by", overridable via flags or JIRA_LINK_TYPE).
+
+Required environment variables (no defaults):
+  JIRA_URL           Jira base URL (https://…)
+  JIRA_USERNAME      Account email
+  JIRA_API_TOKEN     API token
+  JIRA_TEAM_FIELD    Custom field id for Team (e.g. customfield_14700)
+  JIRA_TEAM_ID       Atlassian team UUID
+
+Optional environment variables:
+  JIRA_DIG_ISSUE_TYPE    Default issue type in DIG when --issue-type is omitted (default Bug)
+  JIRA_LINK_TYPE         Default link type name when --link-type is omitted
+  JIRA_SOLVES_LINK_TYPE  Deprecated: used if JIRA_LINK_TYPE is unset`,
+		Example: `  maints dig MAINT-1 MAINT-2
+  maints dig --query 'project = MAINT AND status = Open'
+  maints dig --issue-type Story MAINT-1
+  maints dig --link-swap-ends MAINT-1
+  maints dig --dig-project DIG --link-type "Solved by" MAINT-1`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if strings.TrimSpace(query) != "" && len(args) > 0 {
+				return fmt.Errorf("use either issue keys or --query, not both")
+			}
+			if strings.TrimSpace(query) == "" && len(args) == 0 {
+				return fmt.Errorf("provide issue keys or --query JQL")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.LoadJiraOnly()
+			if err != nil {
+				return err
+			}
+
+			teamField := strings.TrimSpace(os.Getenv("JIRA_TEAM_FIELD"))
+			teamID := strings.TrimSpace(os.Getenv("JIRA_TEAM_ID"))
+
+			it := strings.TrimSpace(issueType)
+			if it == "" {
+				it = dig.DefaultIssueType()
+			}
+			lt := strings.TrimSpace(linkType)
+			if lt == "" {
+				lt = dig.DefaultLinkType()
+			}
+
+			client := jira.NewClient(cfg.JiraURL, cfg.JiraUsername, cfg.JiraAPIToken)
+			return dig.Run(cmd.Context(), client, dig.Options{
+				Keys:         args,
+				JQL:          strings.TrimSpace(query),
+				DigProject:   digProject,
+				IssueType:    it,
+				LinkType:     lt,
+				LinkSwapEnds: linkSwapEnds,
+				TeamField:    teamField,
+				TeamID:       teamID,
+			}, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		},
+	}
+
+	cmd.Flags().StringVar(&query, "query", "", "JQL to select source issues (mutually exclusive with issue keys)")
+	cmd.Flags().StringVar(&digProject, "dig-project", "DIG", "target Jira project key for new issues")
+	cmd.Flags().StringVar(&issueType, "issue-type", "", "issue type name in target project (default: $JIRA_DIG_ISSUE_TYPE or Bug)")
+	cmd.Flags().StringVar(&linkType, "link-type", "", `issue link type name (default: $JIRA_LINK_TYPE, $JIRA_SOLVES_LINK_TYPE, or "Solved by")`)
+	cmd.Flags().BoolVar(&linkSwapEnds, "link-swap-ends", false, "swap outward/inward ends for the issue link")
+	return cmd
 }
 
 func newTriageCmd() *cobra.Command {
@@ -67,8 +152,8 @@ Required environment variables (or .env file):
   CURSOR_API_KEY   cursor-agent API key
 
 Optional environment variables:
-  TRIAGE_HOME      Directory for triage configuration files
-                   (default: $XDG_CONFIG_HOME/triage, or ~/.config/triage)`,
+  MAINTS_HOME      Directory for maints configuration files
+                   (default: $XDG_CONFIG_HOME/maints, or ~/.config/maints)`,
 		Example: `  maints triage PROJ-123
   maints triage PROJ-123 PROJ-456
   maints triage --checklist ./custom-checklist.md PROJ-123

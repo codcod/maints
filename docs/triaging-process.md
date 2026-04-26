@@ -14,7 +14,7 @@ This automated process ensures consistent standards, reduces manual triage overh
 
 ## 2. Core Components
 
-The triage process is orchestrated by a Go application (`internal/triage`) and executed by an AI agent (usually Claude) using the Cursor agent framework. The behavior is defined by a set of configuration files typically stored in `$XDG_CONFIG_HOME/triage` (or `$TRIAGE_HOME`):
+The triage process is orchestrated by a Go application (`internal/triage`) and executed by an AI agent (usually Claude) using the Cursor agent framework. The behavior is defined by a set of configuration files typically stored in `$XDG_CONFIG_HOME/maints` (or `$MAINTS_HOME`):
 
 - **`triage-prompt.md`**: The system instructions defining the agent's persona, the step-by-step evaluation workflow, and output format requirements.
 - **`checklist.md`**: A list of criteria (e.g., Issue Type, Supported Version, Steps to Reproduce, Expected Behavior) that a ticket must satisfy. Items are categorized as `[REQUIRED]`, `[CONDITIONAL]`, or `[OPTIONAL]`.
