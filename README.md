@@ -5,7 +5,7 @@ A Jira maintenance toolkit:
 - `maints dig` copies issues to another project with team and links.
 - `maints dash` lists your MAINT issues and related DIG work in the terminal.
 - `maints open` opens Jira issue pages in the browser.
-- `maints fixversion` sets fix version(s) on DIG issues and comments on linked
+- `maints schedule` sets fix version(s) on DIG issues and comments on linked
   MAINTs.
 - `maints release` follows up linked MAINTs after a fix version (comments; may
   close when all DIG work is done).
@@ -93,8 +93,8 @@ Copy the template to get started: `cp .env.example .env`
   DIG tickets in the terminal.
 - **[`maints open`](docs/open.md)** — Open issue keys in the default browser
   (`MAINT-…`, `DIG-…`, etc.).
-- **[`maints fixversion`](docs/fixversion.md)** — Set or remove fix version(s)
-  on DIG issues; post a comment on the linked MAINT (see `maints fixversion
+- **[`maints schedule`](docs/schedule.md)** — Set or remove fix version(s)
+  on DIG issues; post a comment on the linked MAINT (see `maints schedule
   --help`).
 - **[`maints release`](docs/release.md)** — For a given fix version on DIG,
   update linked MAINTs after release (see `maints release --help`).

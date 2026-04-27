@@ -43,7 +43,7 @@ Use "maints <command> --help" for details on a specific command.`,
 	root.AddCommand(newDigCmd())
 	root.AddCommand(newDashCmd())
 	root.AddCommand(newOpenCmd())
-	root.AddCommand(newFixVersionCmd())
+	root.AddCommand(newScheduleCmd())
 	root.AddCommand(newReleaseCmd())
 	return root
 }
@@ -213,7 +213,7 @@ Optional environment variables:
 	return cmd
 }
 
-func newFixVersionCmd() *cobra.Command {
+func newScheduleCmd() *cobra.Command {
 	var (
 		query        string
 		versions     []string
@@ -223,9 +223,9 @@ func newFixVersionCmd() *cobra.Command {
 		maintProject string
 	)
 	cmd := &cobra.Command{
-		Use:   "fixversion [DIG-KEY]...",
+		Use:   "schedule [DIG-KEY]...",
 		Short: "Set or remove fix version(s) on DIG issues; comment on linked MAINTs when Jira update succeeds",
-		Long: `fixversion sets fixVersions on each DIG (adds names, or removes them with --remove)
+		Long: `schedule sets fixVersions on each DIG (adds names, or removes them with --remove)
 using the same issue link as maints dig / maints dash (default "Solved by", or $JIRA_LINK_TYPE)
 to find the linked MAINT. After a successful update, it posts a Patch Releases comment
 on that MAINT for each version that was added or removed.
@@ -233,9 +233,9 @@ on that MAINT for each version that was added or removed.
 Requires: JIRA_URL, JIRA_USERNAME, JIRA_API_TOKEN.
 
 Example:
-  maints fixversion DIG-1 DIG-2 --version "DS 2025.09.5" --version "1.0"
-  maints fixversion --query "project = DIG and status = 'In Progress'" --version "1.0"
-  maints fixversion DIG-1 --version "1.0" --remove`,
+  maints schedule DIG-1 DIG-2 --version "DS 2025.09.5" --version "1.0"
+  maints schedule --query "project = DIG and status = 'In Progress'" --version "1.0"
+  maints schedule DIG-1 --version "1.0" --remove`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if strings.TrimSpace(query) != "" && len(args) > 0 {
 				return fmt.Errorf("use either issue keys or --query, not both")
