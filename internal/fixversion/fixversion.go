@@ -12,7 +12,7 @@ import (
 
 const patchReleasesWikiURL = "https://backbase.atlassian.net/wiki/x/XAC5CAE"
 
-// Options configure fixversion: DIG keys or JQL, versions, and which link to follow to MAINT.
+// Options configure schedule: DIG keys or JQL, versions, and which link to follow to MAINT.
 type Options struct {
 	Keys         []string
 	JQL          string

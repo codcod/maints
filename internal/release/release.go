@@ -187,7 +187,7 @@ func allDigsDoneOrClosed(ctx context.Context, c *jira.Client, digKeys []string) 
 
 // defaultReleaseJQL matches DIG issues carrying this fix version name.
 func defaultReleaseJQL(digProject, version string) string {
-	// Jira JQL: fixVersion field by name (see maints fixversion and JQL docs).
+	// Jira JQL: fixVersion field by name (see maints schedule and JQL docs).
 	esc := jqlStringLiteral(version)
 	return "project = " + strings.ToUpper(digProject) + " AND fixVersion = " + esc
 }
@@ -277,7 +277,7 @@ func isProjKey(key, project string) bool {
 	return k != "" && strings.HasPrefix(k, p)
 }
 
-// linkTypeMatch mirrors maints dash and fixversion (Jira name / inward / outward, substring).
+// linkTypeMatch mirrors maints dash and schedule (Jira name / inward / outward, substring).
 func linkTypeMatch(want string, typeMap map[string]any) bool {
 	if want == "" || typeMap == nil {
 		return false
