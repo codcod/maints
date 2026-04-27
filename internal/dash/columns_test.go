@@ -66,23 +66,23 @@ func TestParseDashColumnsSummaryWidth(t *testing.T) {
 }
 
 func TestParseDashColumnsCaseAndNames(t *testing.T) {
-	got, err := parseDashColumns("KEY, Due, FIX_VERSION, SumMary")
+	got, err := parseDashColumns("KEY, Due, SCHEDULED_VERSION, SumMary")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"key", "due", "fixversion", "summary"}
+	want := []string{"key", "due", "scheduled", "summary"}
 	if !reflect.DeepEqual(colIDs(got), want) {
 		t.Fatalf("got %v want %v", colIDs(got), want)
 	}
 }
 
-func TestParseDashColumnsFixversionAliases(t *testing.T) {
-	for _, s := range []string{"fixversion", "fix_version", "fix-version", " Fix Version "} {
+func TestParseDashColumnsScheduledAliases(t *testing.T) {
+	for _, s := range []string{"scheduled", "scheduled_version", "scheduled-version", " Scheduled Version "} {
 		got, err := parseDashColumns("key, " + s)
 		if err != nil {
 			t.Fatalf("%q: %v", s, err)
 		}
-		if got[1].id != "fixversion" {
+		if got[1].id != "scheduled" {
 			t.Fatalf("%q: got[1]=%#v", s, got[1])
 		}
 	}

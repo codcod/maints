@@ -1,4 +1,4 @@
-package fixversion
+package schedule
 
 import "testing"
 
