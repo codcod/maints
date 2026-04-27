@@ -6,7 +6,17 @@ Set or remove fix version(s) on DIG issues; comment on linked MAINTs when Jira u
 
 This command requires the **Global Jira Settings** (`JIRA_URL`, `JIRA_USERNAME`, `JIRA_API_TOKEN`). See the [main README](../README.md#configuration) for details. It does **not** use `cursor-agent` or `CURSOR_API_KEY`.
 
-`maints schedule` sets `fixVersions` on each DIG (adds names, or removes them with `--remove`) using the same issue link as `maints dig` / `maints dash` (default `Solved by`, or `$JIRA_LINK_TYPE`) to find the linked MAINT. After a successful update, it posts a "Patch Releases" comment on that MAINT for each version that was added or removed.
+`maints schedule` sets `fixVersions` on each DIG (adds names, or removes them with `--remove`) using the same issue link as `maints dig` / `maints dash` (default `Solved by`, or `$JIRA_LINK_TYPE`) to find the linked MAINT.
+
+After a successful update **adding** a fix version, the command follows up on the linked MAINT(s):
+1. It posts a comment based on the version type:
+   - **Patch versions** (e.g., `DS 2025.09.2`): "Fix for this MAINT has been added to the scope of [version] patch. See details of this patch in [Patch Releases](https://backbase.atlassian.net/wiki/x/XAC5CAE) page."
+   - **Full versions** (e.g., `DS 2025.09`): "Fix for this MAINT has been added to the scope of [version]."
+2. It attempts to transition the MAINT to the `scheduled` status.
+3. It derives an LTS fix version from a patch name (e.g., `DS 2025.09.2` → `2025.09-LTS`) and attempts to add it to the MAINT's `fixVersions`.
+*(If the transition or fix version derivation fails, it prints a warning and proceeds).*
+
+When `--remove` is used, it posts a removal comment to the MAINT and warns you in the CLI: "Make sure to adjust the MAINT accordingly to the removal".
 
 ## Usage
 

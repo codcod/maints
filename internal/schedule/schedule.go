@@ -162,6 +162,9 @@ func runOne(ctx context.Context, client *jira.Client, remove bool, digKey string
 	maintKeys := findLinkedMaints(links, digKey, wantLink, maintProject)
 	if len(maintKeys) == 0 {
 		_, _ = fmt.Fprintf(errOut, "warn: no %s link to %s; skipped MAINT comment(s)\n", wantLink, maintProject)
+		if remove {
+			_, _ = fmt.Fprintf(errOut, "warn: Make sure to adjust the MAINT accordingly to the removal\n")
+		}
 		return nil
 	}
 	if remove {
@@ -173,6 +176,7 @@ func runOne(ctx context.Context, client *jira.Client, remove bool, digKey string
 				}
 			}
 		}
+		_, _ = fmt.Fprintf(errOut, "warn: Make sure to adjust the MAINT accordingly to the removal\n")
 		return nil
 	}
 	for _, v := range toComment {
@@ -181,9 +185,44 @@ func runOne(ctx context.Context, client *jira.Client, remove bool, digKey string
 			if err := client.AddIssueComment(ctx, m, adf); err != nil {
 				return fmt.Errorf("comment on %s: %w", m, err)
 			}
+			maintFollowUpAfterScheduleComment(ctx, client, m, v, errOut)
 		}
 	}
 	return nil
+}
+
+func maintFollowUpAfterScheduleComment(ctx context.Context, client *jira.Client, maintKey, patchVersion string, errOut io.Writer) {
+	if err := client.TransitionToStatusName(ctx, maintKey, "scheduled", ""); err != nil {
+		_, _ = fmt.Fprintf(errOut, "warn: could not transition %s to status scheduled: %v\n", maintKey, err)
+	}
+	lts, ok := patchVersionToMaintLTSFixVersion(patchVersion)
+	if !ok {
+		_, _ = fmt.Fprintf(errOut, "warn: could not derive MAINT fix version from patch %q for %s\n", patchVersion, maintKey)
+		return
+	}
+	if err := mergeIssueFixVersionName(ctx, client, maintKey, lts); err != nil {
+		_, _ = fmt.Fprintf(errOut, "warn: could not add fix version %q to %s: %v\n", lts, maintKey, err)
+	}
+}
+
+func mergeIssueFixVersionName(ctx context.Context, client *jira.Client, issueKey, versionName string) error {
+	fields, err := client.GetIssueFieldsMap(ctx, issueKey, "fixVersions")
+	if err != nil {
+		return err
+	}
+	curObjs, curNames := parseFixVersions(fields["fixVersions"])
+	existing := foldSet(curNames)
+	if existing[strings.ToLower(strings.TrimSpace(versionName))] {
+		return nil
+	}
+	var newObjs []map[string]any
+	for _, o := range curObjs {
+		if u := fixVersionUpdateValue(o); u != nil {
+			newObjs = append(newObjs, u)
+		}
+	}
+	newObjs = append(newObjs, map[string]any{"name": versionName})
+	return client.UpdateIssue(ctx, issueKey, map[string]any{"fixVersions": newObjs})
 }
 
 func uniqueTrimmed(ss []string) (out []string) {
@@ -327,13 +366,16 @@ func issueKeyFromLinkSide(link map[string]any, which string) string {
 	return strings.TrimSpace(k)
 }
 
-// commentADFForAdded and commentADFForRemoved build the text from the spec (Jira markdown-style link
-// in prose → ADF with one link to Patch Releases).
+// commentADFForAdded builds ADF for an added fix version: patch-style versions (trailing numeric
+// patch segment, e.g. "DS 2025.09.2") get the long text with a Patch Releases link; full versions
+// (e.g. "DS 2025.09") get a short line without the link.
 func commentADFForAdded(_, version, url string) map[string]any {
-	// "Fix for this MAINT has been added to the scope of [version] patch.  See details of this patch in [Patch Releases](url) page."
-	lead := "Fix for this MAINT has been added to the scope of " + version + " patch.  See details of this patch in "
-	rest := " page."
-	return paraWithLink(lead, "Patch Releases", url, rest)
+	if versionLooksLikePatch(version) {
+		lead := "Fix for this MAINT has been added to the scope of " + version + " patch.  See details of this patch in "
+		rest := " page."
+		return paraWithLink(lead, "Patch Releases", url, rest)
+	}
+	return paraPlain("Fix for this MAINT has been added to the scope of " + version + ".")
 }
 
 func commentADFForRemoved(_, version, u string) map[string]any {
@@ -362,6 +404,21 @@ func paraWithLink(before, linkText, linkURL, after string) map[string]any {
 						}},
 					},
 					map[string]any{"type": "text", "text": after},
+				},
+			},
+		},
+	}
+}
+
+func paraPlain(text string) map[string]any {
+	return map[string]any{
+		"type":    "doc",
+		"version": 1,
+		"content": []any{
+			map[string]any{
+				"type": "paragraph",
+				"content": []any{
+					map[string]any{"type": "text", "text": text},
 				},
 			},
 		},
