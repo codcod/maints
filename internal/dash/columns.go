@@ -10,7 +10,7 @@ import (
 
 // defaultDashColumnOrder is used when --columns is omitted.
 var defaultDashColumnOrder = []string{
-	"key", "priority", "status", "due", "summary", "fixversion", "assignee",
+	"key", "priority", "status", "due", "summary", "scheduled", "assignee",
 }
 
 var dashColumnHeader = map[string]string{
@@ -19,7 +19,7 @@ var dashColumnHeader = map[string]string{
 	"status":     "STATUS",
 	"due":        "DUE",
 	"summary":    "SUMMARY",
-	"fixversion": "FIXVERSION",
+	"scheduled":  "SCHEDULED",
 	"assignee":   "ASSIGNEE",
 }
 
@@ -105,8 +105,8 @@ func normalizeBareColumnName(s string) (string, error) {
 	low := strings.ToLower(strings.TrimSpace(s))
 	low = strings.ReplaceAll(low, " ", "_")
 	low = strings.ReplaceAll(low, "-", "_")
-	if low == "fix_version" {
-		low = "fixversion"
+	if low == "scheduled_version" {
+		low = "scheduled"
 	}
 	if _, ok := dashColumnHeader[low]; !ok {
 		return "", fmt.Errorf("unknown column name %q in [N] form: valid names are: %s", s, knownDashColumns())
@@ -121,9 +121,9 @@ func normalizeColumnToken(s string) (string, error) {
 	}
 	low := strings.ToLower(s)
 	low = strings.ReplaceAll(low, " ", "_")
-	low = strings.ReplaceAll(low, "-", "_") // e.g. fix-version → fix_version
-	if low == "fix_version" {
-		low = "fixversion"
+	low = strings.ReplaceAll(low, "-", "_") // e.g. scheduled-version → scheduled_version
+	if low == "scheduled_version" {
+		low = "scheduled"
 	}
 	if _, ok := dashColumnHeader[low]; !ok {
 		return "", fmt.Errorf("unknown column %q: valid names are: %s", s, knownDashColumns())
@@ -178,7 +178,7 @@ func maintCell(r Row, c columnSpec) string {
 		return r.Due
 	case "summary":
 		return truncRunes(r.Summary, c.effectiveSummaryMax())
-	case "fixversion":
+	case "scheduled":
 		return dashCellOrDash(r.FixVersion)
 	case "assignee":
 		if strings.TrimSpace(r.Assignee) == "" {
@@ -215,7 +215,7 @@ func digCell(d DigRow, c columnSpec) string {
 			return "—"
 		}
 		return sumD
-	case "fixversion":
+	case "scheduled":
 		return dashCellOrDash(d.FixVersion)
 	case "assignee":
 		if strings.TrimSpace(d.Assignee) == "" {

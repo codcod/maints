@@ -11,10 +11,10 @@ import (
 	"github.com/codcod/maints-triage/internal/config"
 	"github.com/codcod/maints-triage/internal/dash"
 	"github.com/codcod/maints-triage/internal/dig"
-	"github.com/codcod/maints-triage/internal/fixversion"
 	"github.com/codcod/maints-triage/internal/jira"
 	"github.com/codcod/maints-triage/internal/open"
 	"github.com/codcod/maints-triage/internal/release"
+	"github.com/codcod/maints-triage/internal/schedule"
 	"github.com/codcod/maints-triage/internal/server"
 	"github.com/codcod/maints-triage/internal/triage"
 )
@@ -103,7 +103,7 @@ Requires Jira credentials only (no cursor-agent).`,
 		Example: `  maints dash
   maints dash --assignee colleague@example.com
   maints dash --columns "key, priority, due"
-  maints dash --columns "key, summary[20], fixversion, assignee"
+  maints dash --columns "key, summary[20], scheduled, assignee"
   maints dash --dig-project DIG
   maints dash --jql 'project = MAINT AND assignee = currentUser() ORDER BY created ASC'`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -126,7 +126,7 @@ Requires Jira credentials only (no cursor-agent).`,
 	cmd.Flags().StringVar(&assignee, "assignee", "", "built-in JQL: filter assignee to this Jira user (email, name, or id; mutually exclusive with --jql)")
 	cmd.Flags().StringVar(&digProject, "dig-project", "DIG", "Jira project key for linked work items (e.g. DIG)")
 	cmd.Flags().StringVar(&linkType, "link-type", "", `issue link name to follow (default: $JIRA_LINK_TYPE or "Solved by")`)
-	cmd.Flags().StringVar(&columns, "columns", "", `comma-separated column names: key, priority, status, due, summary, fixversion, assignee (default: all, in that order; case-insensitive). Use summary[N] for a custom max width in runes (e.g. summary[20]); default is 50`)
+	cmd.Flags().StringVar(&columns, "columns", "", `comma-separated column names: key, priority, status, due, summary, scheduled, assignee (default: all, in that order; case-insensitive). Use summary[N] for a custom max width in runes (e.g. summary[20]); default is 50`)
 	cmd.Flags().BoolVar(&debug, "debug", false, "print each issue's issuelinks (type names, keys) to stderr")
 	return cmd
 }
@@ -255,7 +255,7 @@ Example:
 				lt = dig.DefaultLinkType()
 			}
 			client := jira.NewClient(cfg.JiraURL, cfg.JiraUsername, cfg.JiraAPIToken)
-			return fixversion.Run(cmd.Context(), client, fixversion.Options{
+			return schedule.Run(cmd.Context(), client, schedule.Options{
 				Keys:         args,
 				JQL:          strings.TrimSpace(query),
 				Versions:     versions,
