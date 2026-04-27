@@ -1,14 +1,16 @@
 # MAINTs CLI (`maints`)
 
 A Jira maintenance toolkit:
-- `maints triage` and `maints serve` use an AI agent to evaluate issues.
-- `maints dig` copies issues to another project with team and links.
 - `maints dash` lists your MAINT issues and related DIG work in the terminal.
 - `maints open` opens Jira issue pages in the browser.
+- `maints dig` copies issues to another project with team and links.
 - `maints schedule` sets fix version(s) on DIG issues and comments on linked
   MAINTs.
 - `maints release` follows up linked MAINTs after a fix version (comments; may
   close when all DIG work is done).
+
+Extra:
+- `maints triage` and `maints serve` use an AI agent to evaluate issues.
 
 Command documentation is in the `docs/` folder where available; `maints
 <command> --help` lists all flags.
@@ -22,40 +24,11 @@ brew tap codcod/taps
 brew install maints
 ```
 
-### From source
-
-#### Prerequisites
-- Go 1.25+
-
-#### Install
-
-```bash
-git clone https://github.com/codcod/maints.git
-cd maints
-go install ./cmd/maints
-```
-
 Verify:
 ```bash
 maints --version
 maints --help
 ```
-
-### Build from source
-
-To build a binary in the current directory (without `go install` to
-`$GOPATH/bin`):
-
-```bash
-go build -o maints ./cmd/maints
-```
-
-With `just` (binary version follows the current git tag):
-```bash
-just build
-```
-
-Builds with no git context report `dev` as the version.
 
 ## Configuration
 
@@ -66,8 +39,7 @@ Copy the template to get started: `cp .env.example .env`
 - `JIRA_URL`: Jira base URL (e.g., `https://your-company.atlassian.net`) —
   required for every command
 - `JIRA_USERNAME` / `JIRA_API_TOKEN`: required for any command that calls the
-  Jira API (not for [`maints open`](docs/open.md), which only opens browse
-  URLs)
+  Jira API
 
 ### Agent Settings (used by `triage` and `serve`)
 - `CURSOR_API_KEY`: API key for `cursor-agent`
@@ -83,27 +55,24 @@ Copy the template to get started: `cp .env.example .env`
 
 ## Commands
 
-- **[`maints triage`](docs/triage.md)** — Run AI triage on one or more Jira
-  issues.
-- **[`maints serve`](docs/serve.md)** — Poll Jira and triage new issues
-  automatically.
-- **[`maints dig`](docs/dig.md)** — Duplicate issues into another project with
-  team and links.
 - **[`maints dash`](docs/dash.md)** — List your MAINT Flow issues and linked
   DIG tickets in the terminal.
 - **[`maints open`](docs/open.md)** — Open issue keys in the default browser
   (`MAINT-…`, `DIG-…`, etc.).
+- **[`maints dig`](docs/dig.md)** — Duplicate issues into another project with
+  team and links.
 - **[`maints schedule`](docs/schedule.md)** — Set or remove fix version(s)
   on DIG issues; post a comment on the linked MAINT (see `maints schedule
   --help`).
 - **[`maints release`](docs/release.md)** — For a given fix version on DIG,
   update linked MAINTs after release (see `maints release --help`).
 
-## Help
+## Commands (extra)
 
-```bash
-maints --help
-```
+- **[`maints triage`](docs/triage.md)** — Run AI triage on one or more Jira
+  issues.
+- **[`maints serve`](docs/serve.md)** — Poll Jira and triage new issues
+  automatically.
 
 ## License
 
