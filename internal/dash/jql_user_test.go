@@ -34,6 +34,19 @@ func TestIsMaintUrgentStatus(t *testing.T) {
 	}
 }
 
+func TestIsMaintCriticalPriority(t *testing.T) {
+	for _, s := range []string{"Blocker", " blocker ", "Critical", "CRITICAL"} {
+		if !isMaintCriticalPriority(s) {
+			t.Fatalf("expected critical priority: %q", s)
+		}
+	}
+	for _, s := range []string{"", "Major", "Minor", "Open"} {
+		if isMaintCriticalPriority(s) {
+			t.Fatalf("expected not critical priority: %q", s)
+		}
+	}
+}
+
 func TestIsPastDueCell(t *testing.T) {
 	if isPastDueCell("—") {
 		t.Fatal("placeholder")

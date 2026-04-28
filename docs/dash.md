@@ -52,6 +52,8 @@ Styling details:
 - Each **MAINT** data row is **red**; DIG rows are normal.
 - On a MAINT row, **STATUS** is **white on red** if it is Open, AWAITING INPUT,
   or TRIAGE (case-insensitive).
+- On a MAINT row, **PRIORITY** is **white on red** if it is Blocker or Critical
+  (case-insensitive).
 - A **DUE** value strictly before today (local) is **white on red** in that cell. 
 - Set **`NO_COLOR`** in the environment to disable all styling.
 

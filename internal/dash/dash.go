@@ -561,9 +561,9 @@ func formatDigSettledRow(cells []string, colSpecs []columnSpec, widths []int, ga
 }
 
 // formatMaintsRowColored is a red-foreground line for a MAINT row, with selected
-// cells in white on red: STATUS for Open / AWAITING INPUT / TRIAGE, and DUE when
-// the date is strictly before local today. Column position follows colSpecs.
-// Only use when the outer table run has color (NO_COLOR is unset).
+// cells in white on red: STATUS for Open / AWAITING INPUT / TRIAGE; PRIORITY for
+// Blocker / Critical; DUE when the date is strictly before local today. Column
+// position follows colSpecs. Only use when the outer table run has color (NO_COLOR is unset).
 func formatMaintsRowColored(cells []string, colSpecs []columnSpec, widths []int, gap string) string {
 	var b strings.Builder
 	b.WriteString(ansiRedFG)
@@ -573,7 +573,9 @@ func formatMaintsRowColored(cells []string, colSpecs []columnSpec, widths []int,
 		}
 		pad := padCellToRunes(cells[i], widths[i])
 		k := colSpecs[i].id
-		highlight := (k == "status" && isMaintUrgentStatus(cells[i])) || (k == "due" && isPastDueCell(cells[i]))
+		highlight := (k == "status" && isMaintUrgentStatus(cells[i])) ||
+			(k == "priority" && isMaintCriticalPriority(cells[i])) ||
+			(k == "due" && isPastDueCell(cells[i]))
 		if highlight {
 			b.WriteString(ansiReset)
 			b.WriteString(ansiWhiteOnRed)
@@ -604,6 +606,12 @@ func isMaintUrgentStatus(s string) bool {
 	default:
 		return false
 	}
+}
+
+// isMaintCriticalPriority is true when the MAINT PRIORITY cell should read as Blocker or Critical in the dash.
+func isMaintCriticalPriority(s string) bool {
+	s = strings.TrimSpace(s)
+	return strings.EqualFold(s, "Blocker") || strings.EqualFold(s, "Critical")
 }
 
 // isPastDueCell is true for a YYYY-MM-dd (or datetime prefix) in the DUE cell strictly before start of local today.
