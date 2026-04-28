@@ -36,6 +36,13 @@ AND status not in (Done, Closed)
 ORDER BY assignee, priority, created asc
 ```
 
+After the table, **`--supervisor`** also prints a **supervisor summary**:
+total MAINT count; **needs action** (rows that would be highlighted in the
+table: Blocker/Critical, past-due, or status Open / AWAITING INPUT / TRIAGE),
+with a breakdown by category; counts **by Jira status** (descending); and per-
+**assignee** totals with needs-action counts (sorted by needs action, then
+total, then name). `NO_COLOR` disables styling in this block too.
+
 ## Output
 
 By default the table includes these columns, in order: **KEY** (indented for
@@ -74,7 +81,8 @@ and check stderr.
   value (Jira user email, display string, or id). Mutually exclusive with
   `--jql` and `--supervisor`.
 - `--supervisor`: Use the built-in MAINT-Flow JQL **without** limiting
-  `assignee` (team overview). Mutually exclusive with `--jql` and `--assignee`.
+  `assignee` (team overview). After the dashboard table, prints aggregate
+  statistics. Mutually exclusive with `--jql` and `--assignee`.
 - `--no-dig`: Print only **MAINT** rows (no linked DIG sub-rows, no DIG detail
   fetches, no per-MAINT issue-link reload). JQL and column flags behave as usual.
 - `--dig-project`: Project key for "DIG" work items (default `DIG`).

@@ -159,6 +159,9 @@ func Run(ctx context.Context, client *jira.Client, w, errW io.Writer, o Options)
 		return err
 	}
 	printDashboard(w, rows, useColor(), colSpecs)
+	if o.Supervisor {
+		printSupervisorSummary(w, rows, useColor())
+	}
 	return nil
 }
 

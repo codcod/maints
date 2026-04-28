@@ -1,7 +1,9 @@
 package dash
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/codcod/maints-triage/internal/jira"
 )
@@ -109,4 +111,47 @@ func TestLinkTypeMatch(t *testing.T) {
 			t.Fatal("no match")
 		}
 	})
+}
+
+func TestMaintNeedsAttention(t *testing.T) {
+	if !maintNeedsAttention(Row{Priority: "Critical", Status: "Scheduled", Due: "2099-01-01"}) {
+		t.Fatal("Critical should need attention")
+	}
+	if !maintNeedsAttention(Row{Priority: "Minor", Status: "Open", Due: "2099-01-01"}) {
+		t.Fatal("Open status should need attention")
+	}
+	past := time.Date(2010, 1, 2, 0, 0, 0, 0, time.Local).Format("2006-01-02")
+	if !maintNeedsAttention(Row{Priority: "Minor", Status: "In Progress", Due: past}) {
+		t.Fatal("Past due should need attention")
+	}
+	if maintNeedsAttention(Row{Priority: "Minor", Status: "In Progress", Due: "2099-01-01"}) {
+		t.Fatal("clean row should not need attention")
+	}
+}
+
+func TestPrintSupervisorSummary(t *testing.T) {
+	past := time.Date(2010, 1, 2, 0, 0, 0, 0, time.Local).Format("2006-01-02")
+	rows := []Row{
+		{Priority: "Critical", Status: "Scheduled", Due: "2099-01-01", Assignee: "Alice"},
+		{Priority: "Minor", Status: "Open", Due: "2099-01-01", Assignee: "Bob"},
+		{Priority: "Minor", Status: "In Progress", Due: past, Assignee: "Alice"},
+	}
+	var buf strings.Builder
+	printSupervisorSummary(&buf, rows, false)
+	out := buf.String()
+	if !strings.Contains(out, "Total issues : 3") {
+		t.Fatalf("missing total: %q", out)
+	}
+	if !strings.Contains(out, "Needs action : 3") {
+		t.Fatalf("missing needs action: %q", out)
+	}
+	if !strings.Contains(out, "Critical/Blocker 1") || !strings.Contains(out, "Past due 1") || !strings.Contains(out, "Urgent status 1") {
+		t.Fatalf("expected breakdown: %q", out)
+	}
+	if !strings.Contains(out, "Alice") || !strings.Contains(out, "2 total") || !strings.Contains(out, "2 needs action") {
+		t.Fatalf("expected Alice aggregate: %q", out)
+	}
+	if !strings.Contains(out, "Open: 1") || !strings.Contains(out, "In Progress: 1") {
+		t.Fatalf("expected status line: %q", out)
+	}
 }
