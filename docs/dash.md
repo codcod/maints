@@ -14,8 +14,8 @@ override this per run with `--link-type`.
 
 ## Default JQL
 
-If you do not pass `--jql`, `--assignee`, or `--supervisor`, `maints dash` uses the
-following query:
+If you do not pass `--jql`, `--assignee`, or `--supervisor`, `maints dash` uses
+the following query:
 
 ```jql
 project = MAINT
@@ -25,9 +25,9 @@ AND assignee=currentUser()
 ORDER BY priority, created asc
 ```
 
-With **`--supervisor`**, the same Flow filter is used but **without** an assignee
-restriction, so you can see open Flow MAINTs for **all** assignees (ordered by
-assignee, then priority, then created):
+With **`--supervisor`**, the same Flow filter is used but **without** an
+assignee restriction, so you can see open Flow MAINTs for **all** assignees
+(ordered by assignee, then priority, then created):
 
 ```jql
 project = MAINT
@@ -49,7 +49,7 @@ Without **`--summary`**, **`--supervisor`** only prints the dashboard table.
 By default the table includes these columns, in order: **KEY** (indented for
 linked DIGs), **PRIORITY**, **STATUS**, **DUE** (`—` for DIGs), **SUMMARY**
 (truncated to 50 runes for MAINT and DIG lines), **SCHEDULED** (Jira
-`fixVersions` names, comma‑separated when there are several), and **ASSIGNEE**.
+`fixVersions` names, comma-separated when there are several), and **ASSIGNEE**.
 Use `--columns` to list only the columns you want, in the order you list them
 (see [Flags](#flags)). For **SUMMARY**, the default max width is 50 runes; add
 a bracketed number to set a different max (e.g. `SUMMARY[20]` in the header
@@ -62,7 +62,8 @@ Styling details:
   or TRIAGE (case-insensitive).
 - On a MAINT row, **PRIORITY** is **white on red** if it is Blocker or Critical
   (case-insensitive).
-- A **DUE** value strictly before today (local) is **white on red** in that cell. 
+- A **DUE** value strictly before today (local) is **white on red** in that
+  cell.
 - Set **`NO_COLOR`** in the environment to disable all styling.
 
 JQL search does not always return `issuelinks`, so the command also performs a
@@ -74,10 +75,10 @@ Link matching checks `type.name`, `inward`, and `outward` descriptions,
 including substring matches. If DIG rows are missing, run `maints dash --debug`
 and check stderr.
 
-**`--status` and `--priority`:** Comma‑separated lists of Jira **status** and
+**`--status` and `--priority`:** Comma-separated lists of Jira **status** and
 **priority** names. After the JQL search, only MAINT rows whose status (and
 priority, when the flag is set) match one of the listed values are printed
-(Unicode case‑folding; extra spaces after commas are ignored). If both are set,
+(Unicode case-folding; extra spaces after commas are ignored). If both are set,
 a row must match both. If that leaves no rows, a short message is printed
 instead of an empty table.
 
@@ -92,15 +93,17 @@ instead of an empty table.
   `assignee` (team overview). Mutually exclusive with `--jql` and `--assignee`.
 - `--summary`: With **`--supervisor`**, print aggregate statistics after the
   dashboard table (ignored without `--supervisor`).
-- `--status`: Comma‑separated MAINT **status** names to include (optional spaces;
-  case‑insensitive). Empty = no filter. Applied after JQL results.
-- `--priority`: Comma‑separated MAINT **priority** names to include (same rules
-  as `--status`). Use both flags together to require a match for each dimension.
+- `--status`: Comma-separated MAINT **status** names to include (optional
+  spaces; case-insensitive). Empty = no filter. Applied after JQL results.
+- `--priority`: Comma-separated MAINT **priority** names to include (same
+  rules as `--status`). Use both flags together to require a match for each
+  dimension.
 - `--no-dig`: Print only **MAINT** rows (no linked DIG sub-rows, no DIG detail
-  fetches, no per-MAINT issue-link reload). JQL and column flags behave as usual.
+  fetches, no per-MAINT issue-link reload). JQL and column flags behave as
+  usual.
 - `--dig-project`: Project key for "DIG" work items (default `DIG`).
 - `--link-type`: Link type name in Jira (default from env or `Solved by`).
-- `--columns`: Comma‑separated column names (case‑insensitive; optional
+- `--columns`: Comma-separated column names (case-insensitive; optional
   spaces). Allowed names: `key`, `priority`, `status`, `due`, `summary`,
   `scheduled` (also `scheduled_version` or `scheduled-version`); `assignee`.
   The **summary** column defaults to 50 runes; use `summary[N]` to cap at `N`
@@ -121,5 +124,6 @@ maints dash --priority 'Critical' --status 'In Progress'
 maints dash --columns "key, priority, due"
 maints dash --columns "key, summary[20], scheduled, assignee"
 maints dash --dig-project DIG --link-type "Solved by"
-maints dash --jql 'project = MAINT AND assignee = currentUser() ORDER BY created ASC'
+maints dash \
+  --jql 'project = MAINT AND assignee = currentUser() ORDER BY created ASC'
 ```

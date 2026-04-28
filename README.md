@@ -55,17 +55,16 @@ Copy the template to get started: `cp .env.example .env`
 
 ## Commands
 
-- **[`maints dash`](docs/dash.md)** — List your MAINT Flow issues and linked
+- **[`maints dash`](docs/dash.md)** — List your MAINT issues and linked
   DIG tickets in the terminal.
 - **[`maints open`](docs/open.md)** — Open issue keys in the default browser
   (`MAINT-…`, `DIG-…`, etc.).
-- **[`maints dig`](docs/dig.md)** — Duplicate issues into another project with
-  team and links.
+- **[`maints dig`](docs/dig.md)** — Create corresponding DIG ticket for a MAINT.
 - **[`maints schedule`](docs/schedule.md)** — Set or remove fix version(s)
   on DIG issues; post a comment on the linked MAINT (see `maints schedule
   --help`).
-- **[`maints release`](docs/release.md)** — For a given fix version on DIG,
-  update linked MAINTs after release (see `maints release --help`).
+- **[`maints release`](docs/release.md)** — Update linked MAINTs after release
+  (see `maints release --help`).
 
 ## Commands (extra)
 
