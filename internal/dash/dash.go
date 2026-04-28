@@ -72,12 +72,18 @@ type Options struct {
 	Assignee string
 	// Supervisor uses the built-in Flow JQL without an assignee filter (mutually exclusive with --jql and --assignee).
 	Supervisor bool
+	// SupervisorSummary, with Supervisor, prints the aggregate statistics block after the table.
+	SupervisorSummary bool
 	// Debug prints issuelink metadata to errW (link types, keys) for troubleshooting.
 	Debug bool
 	// Columns is a comma-separated list of column names (e.g. key, priority, due). Empty means all default columns.
 	Columns string
 	// NoDig lists only MAINT rows: no linked DIG sub-rows and no per-DIG or per-issue-link fetches for the dashboard.
 	NoDig bool
+	// StatusFilter is comma-separated allowed MAINT status names (trimmed, case-insensitive). Empty = no filter.
+	StatusFilter string
+	// PriorityFilter is comma-separated allowed MAINT priority names (trimmed, case-insensitive). Empty = no filter.
+	PriorityFilter string
 }
 
 // Run fetches Jira and prints a text dashboard to w; link diagnostics to errW when o.Debug.
@@ -154,12 +160,20 @@ func Run(ctx context.Context, client *jira.Client, w, errW io.Writer, o Options)
 			}
 		}
 	}
+	statusAllow := splitCommaList(o.StatusFilter)
+	priorityAllow := splitCommaList(o.PriorityFilter)
+	nBefore := len(rows)
+	rows = filterMaintRows(rows, statusAllow, priorityAllow)
+	if len(rows) == 0 && nBefore > 0 && (len(statusAllow) > 0 || len(priorityAllow) > 0) {
+		_, _ = fmt.Fprintln(w, "No MAINT rows match --status/--priority filters.")
+		return nil
+	}
 	colSpecs, err := parseDashColumns(o.Columns)
 	if err != nil {
 		return err
 	}
 	printDashboard(w, rows, useColor(), colSpecs)
-	if o.Supervisor {
+	if o.Supervisor && o.SupervisorSummary {
 		printSupervisorSummary(w, rows, useColor())
 	}
 	return nil

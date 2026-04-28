@@ -82,14 +82,17 @@ Issue keys look like PROJ-123 (letters, numbers, and underscores in the project 
 
 func newDashCmd() *cobra.Command {
 	var (
-		jql        string
-		digProject string
-		linkType   string
-		assignee   string
-		supervisor bool
-		columns    string
-		debug      bool
-		noDig      bool
+		jql               string
+		digProject        string
+		linkType          string
+		assignee          string
+		supervisor        bool
+		supervisorSummary bool
+		columns           string
+		debug             bool
+		noDig             bool
+		statusFilter      string
+		priorityFilter    string
 	)
 	cmd := &cobra.Command{
 		Use:   "dash",
@@ -105,11 +108,19 @@ without an assignee restriction (overview across assignees). Do not combine
 
 Use --no-dig to print only MAINT rows (no linked DIG lines or DIG API calls).
 
+Use --status and --priority with comma-separated lists to restrict the printed
+MAINT rows (case-insensitive; applies after the JQL results).
+
+With --supervisor, add --summary to print team aggregate statistics after the table.
+
 Requires Jira credentials only (no cursor-agent).`,
 		Example: `  maints dash
   maints dash --no-dig
   maints dash --assignee colleague@example.com
   maints dash --supervisor
+  maints dash --supervisor --summary
+  maints dash --status 'Scheduled,In Progress' --priority 'Critical,Blocker'
+  maints dash --priority 'Critical' --status 'In Progress'
   maints dash --columns "key, priority, due"
   maints dash --columns "key, summary[20], scheduled, assignee"
   maints dash --dig-project DIG
@@ -121,25 +132,31 @@ Requires Jira credentials only (no cursor-agent).`,
 			}
 			client := jira.NewClient(cfg.JiraURL, cfg.JiraUsername, cfg.JiraAPIToken)
 			return dash.Run(cmd.Context(), client, cmd.OutOrStdout(), cmd.ErrOrStderr(), dash.Options{
-				JQL:        jql,
-				DigProject: digProject,
-				LinkType:   linkType,
-				Assignee:   assignee,
-				Supervisor: supervisor,
-				Columns:    columns,
-				Debug:      debug,
-				NoDig:      noDig,
+				JQL:               jql,
+				DigProject:        digProject,
+				LinkType:          linkType,
+				Assignee:          assignee,
+				Supervisor:        supervisor,
+				SupervisorSummary: supervisorSummary,
+				Columns:           columns,
+				Debug:             debug,
+				NoDig:             noDig,
+				StatusFilter:      statusFilter,
+				PriorityFilter:    priorityFilter,
 			})
 		},
 	}
 	cmd.Flags().StringVar(&jql, "jql", "", "override the default JQL (see docs/dash.md for the built-in query; mutually exclusive with --assignee and --supervisor)")
 	cmd.Flags().StringVar(&assignee, "assignee", "", "built-in JQL: filter assignee to this Jira user (email, name, or id; mutually exclusive with --jql and --supervisor)")
 	cmd.Flags().BoolVar(&supervisor, "supervisor", false, "built-in JQL: all Flow MAINT assignees (no assignee filter; mutually exclusive with --jql and --assignee)")
+	cmd.Flags().BoolVar(&supervisorSummary, "summary", false, "with --supervisor, print aggregate statistics after the dashboard table")
 	cmd.Flags().StringVar(&digProject, "dig-project", "DIG", "Jira project key for linked work items (e.g. DIG)")
 	cmd.Flags().StringVar(&linkType, "link-type", "", `issue link name to follow (default: $JIRA_LINK_TYPE or "Solved by")`)
 	cmd.Flags().StringVar(&columns, "columns", "", `comma-separated column names: key, priority, status, due, summary, scheduled, assignee (default: all, in that order; case-insensitive). Use summary[N] for a custom max width in runes (e.g. summary[20]); default is 50`)
 	cmd.Flags().BoolVar(&debug, "debug", false, "print each issue's issuelinks (type names, keys) to stderr")
 	cmd.Flags().BoolVar(&noDig, "no-dig", false, "print only MAINT rows (no linked DIG sub-rows or DIG fetches)")
+	cmd.Flags().StringVar(&statusFilter, "status", "", "comma-separated MAINT statuses to include (case-insensitive; empty = no filter)")
+	cmd.Flags().StringVar(&priorityFilter, "priority", "", "comma-separated MAINT priorities to include (case-insensitive; empty = no filter)")
 	return cmd
 }
 

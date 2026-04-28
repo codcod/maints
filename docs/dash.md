@@ -36,12 +36,13 @@ AND status not in (Done, Closed)
 ORDER BY assignee, priority, created asc
 ```
 
-After the table, **`--supervisor`** also prints a **supervisor summary**:
+After the table, **`--supervisor --summary`** prints a **supervisor summary**:
 total MAINT count; **needs action** (rows that would be highlighted in the
 table: Blocker/Critical, past-due, or status Open / AWAITING INPUT / TRIAGE),
 with a breakdown by category; counts **by Jira status** (descending); and per-
 **assignee** totals with needs-action counts (sorted by needs action, then
 total, then name). `NO_COLOR` disables styling in this block too.
+Without **`--summary`**, **`--supervisor`** only prints the dashboard table.
 
 ## Output
 
@@ -73,6 +74,13 @@ Link matching checks `type.name`, `inward`, and `outward` descriptions,
 including substring matches. If DIG rows are missing, run `maints dash --debug`
 and check stderr.
 
+**`--status` and `--priority`:** Comma‑separated lists of Jira **status** and
+**priority** names. After the JQL search, only MAINT rows whose status (and
+priority, when the flag is set) match one of the listed values are printed
+(Unicode case‑folding; extra spaces after commas are ignored). If both are set,
+a row must match both. If that leaves no rows, a short message is printed
+instead of an empty table.
+
 ## Flags
 
 - `--jql`: Replace the default JQL entirely (mutually exclusive with
@@ -81,8 +89,13 @@ and check stderr.
   value (Jira user email, display string, or id). Mutually exclusive with
   `--jql` and `--supervisor`.
 - `--supervisor`: Use the built-in MAINT-Flow JQL **without** limiting
-  `assignee` (team overview). After the dashboard table, prints aggregate
-  statistics. Mutually exclusive with `--jql` and `--assignee`.
+  `assignee` (team overview). Mutually exclusive with `--jql` and `--assignee`.
+- `--summary`: With **`--supervisor`**, print aggregate statistics after the
+  dashboard table (ignored without `--supervisor`).
+- `--status`: Comma‑separated MAINT **status** names to include (optional spaces;
+  case‑insensitive). Empty = no filter. Applied after JQL results.
+- `--priority`: Comma‑separated MAINT **priority** names to include (same rules
+  as `--status`). Use both flags together to require a match for each dimension.
 - `--no-dig`: Print only **MAINT** rows (no linked DIG sub-rows, no DIG detail
   fetches, no per-MAINT issue-link reload). JQL and column flags behave as usual.
 - `--dig-project`: Project key for "DIG" work items (default `DIG`).
@@ -102,6 +115,9 @@ maints dash
 maints dash --no-dig
 maints dash --assignee 'Name Surname'
 maints dash --supervisor
+maints dash --supervisor --summary
+maints dash --status 'Scheduled,In Progress' --priority 'Critical,Blocker'
+maints dash --priority 'Critical' --status 'In Progress'
 maints dash --columns "key, priority, due"
 maints dash --columns "key, summary[20], scheduled, assignee"
 maints dash --dig-project DIG --link-type "Solved by"

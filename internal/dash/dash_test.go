@@ -155,3 +155,40 @@ func TestPrintSupervisorSummary(t *testing.T) {
 		t.Fatalf("expected status line: %q", out)
 	}
 }
+
+func TestSplitCommaList(t *testing.T) {
+	if got := splitCommaList(""); got != nil {
+		t.Fatalf("empty: %v", got)
+	}
+	if got := splitCommaList("  "); got != nil {
+		t.Fatalf("whitespace: %v", got)
+	}
+	if got, want := splitCommaList("a, b, c"), []string{"a", "b", "c"}; len(got) != len(want) {
+		t.Fatalf("got %v", got)
+	} else {
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("got %v want %v", got, want)
+			}
+		}
+	}
+}
+
+func TestFilterMaintRows(t *testing.T) {
+	rows := []Row{
+		{Key: "1", Status: "Scheduled", Priority: "Critical"},
+		{Key: "2", Status: "In Progress", Priority: "Minor"},
+		{Key: "3", Status: "in progress", Priority: "Blocker"},
+	}
+	out := filterMaintRows(rows, []string{"scheduled", "in progress"}, []string{"critical", "blocker"})
+	if len(out) != 2 || out[0].Key != "1" || out[1].Key != "3" {
+		t.Fatalf("got %+v", out)
+	}
+	out2 := filterMaintRows(rows, nil, []string{"Minor"})
+	if len(out2) != 1 || out2[0].Key != "2" {
+		t.Fatalf("priority only: %+v", out2)
+	}
+	if len(filterMaintRows(rows, nil, nil)) != 3 {
+		t.Fatal("no filter")
+	}
+}
