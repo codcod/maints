@@ -14,8 +14,8 @@ override this per run with `--link-type`.
 
 ## Default JQL
 
-If you do not pass `--jql` or `--assignee`, `maints dash` uses the following
-query:
+If you do not pass `--jql`, `--assignee`, or `--supervisor`, `maints dash` uses the
+following query:
 
 ```jql
 project = MAINT
@@ -23,6 +23,17 @@ AND "Maint Component[Select List (cascading)]" IN cascadeOption(Flow)
 AND status not in (Done, Closed)
 AND assignee=currentUser()
 ORDER BY priority, created asc
+```
+
+With **`--supervisor`**, the same Flow filter is used but **without** an assignee
+restriction, so you can see open Flow MAINTs for **all** assignees (ordered by
+assignee, then priority, then created):
+
+```jql
+project = MAINT
+AND "Maint Component[Select List (cascading)]" IN cascadeOption(Flow)
+AND status not in (Done, Closed)
+ORDER BY assignee, priority, created asc
 ```
 
 ## Output
@@ -56,10 +67,12 @@ and check stderr.
 ## Flags
 
 - `--jql`: Replace the default JQL entirely (mutually exclusive with
-  `--assignee`).
+  `--assignee` and `--supervisor`).
 - `--assignee`: Use the built-in MAINT-Flow JQL, but filter `assignee` to this
   value (Jira user email, display string, or id). Mutually exclusive with
-  `--jql`.
+  `--jql` and `--supervisor`.
+- `--supervisor`: Use the built-in MAINT-Flow JQL **without** limiting
+  `assignee` (team overview). Mutually exclusive with `--jql` and `--assignee`.
 - `--dig-project`: Project key for "DIG" work items (default `DIG`).
 - `--link-type`: Link type name in Jira (default from env or `Solved by`).
 - `--columns`: Comma‑separated column names (case‑insensitive; optional
@@ -75,6 +88,7 @@ and check stderr.
 ```bash
 maints dash
 maints dash --assignee 'Name Surname'
+maints dash --supervisor
 maints dash --columns "key, priority, due"
 maints dash --columns "key, summary[20], scheduled, assignee"
 maints dash --dig-project DIG --link-type "Solved by"

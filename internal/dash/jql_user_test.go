@@ -56,4 +56,16 @@ func TestEffectiveDashJQL(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "either --jql or --assignee") {
 		t.Fatalf("expected mutual exclusion: %v", err)
 	}
+	j, err = effectiveDashJQL(Options{Supervisor: true})
+	if err != nil || j != DefaultJQLSupervisor {
+		t.Fatalf("supervisor: %q %v", j, err)
+	}
+	_, err = effectiveDashJQL(Options{JQL: "x", Supervisor: true})
+	if err == nil || !strings.Contains(err.Error(), "either --jql or --supervisor") {
+		t.Fatalf("expected jql+supervisor exclusion: %v", err)
+	}
+	_, err = effectiveDashJQL(Options{Assignee: "u@x.com", Supervisor: true})
+	if err == nil || !strings.Contains(err.Error(), "either --assignee or --supervisor") {
+		t.Fatalf("expected assignee+supervisor exclusion: %v", err)
+	}
 }

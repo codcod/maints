@@ -18,6 +18,10 @@ import (
 const DefaultJQL = `project = MAINT AND "Maint Component[Select List (cascading)]" IN cascadeOption(Flow) ` +
 	`AND status not in (Done, Closed) AND assignee=currentUser() ORDER BY priority, created asc`
 
+// DefaultJQLSupervisor is the same Flow filter as DefaultJQL but without limiting assignee (e.g. team overview).
+const DefaultJQLSupervisor = `project = MAINT AND "Maint Component[Select List (cascading)]" IN cascadeOption(Flow) ` +
+	`AND status not in (Done, Closed) ORDER BY assignee, priority, created asc`
+
 // DefaultJQLForAssignee is the same filter with assignee set to a specific Jira user (email, name, or account id string).
 // assigneeS must be safe for a J-quoted JQL value (see jiraAssigneeJQLString).
 func DefaultJQLForAssignee(assigneeS string) string {
@@ -66,6 +70,8 @@ type Options struct {
 	LinkType   string
 	// Assignee, when set, selects the default JQL for that assignee (use with the built-in query, not with --jql).
 	Assignee string
+	// Supervisor uses the built-in Flow JQL without an assignee filter (mutually exclusive with --jql and --assignee).
+	Supervisor bool
 	// Debug prints issuelink metadata to errW (link types, keys) for troubleshooting.
 	Debug bool
 	// Columns is a comma-separated list of column names (e.g. key, priority, due). Empty means all default columns.
@@ -152,18 +158,27 @@ func useColor() bool {
 	return os.Getenv("NO_COLOR") == ""
 }
 
-// effectiveDashJQL resolves --jql, --assignee, and the default query (mutually exclusive: --jql vs --assignee).
+// effectiveDashJQL resolves --jql, --assignee, --supervisor, and the default query.
 func effectiveDashJQL(o Options) (string, error) {
 	jqlIn := strings.TrimSpace(o.JQL)
 	assigneeIn := strings.TrimSpace(o.Assignee)
 	if jqlIn != "" && assigneeIn != "" {
 		return "", fmt.Errorf("use either --jql or --assignee, not both")
 	}
+	if o.Supervisor && jqlIn != "" {
+		return "", fmt.Errorf("use either --jql or --supervisor, not both")
+	}
+	if o.Supervisor && assigneeIn != "" {
+		return "", fmt.Errorf("use either --assignee or --supervisor, not both")
+	}
 	if jqlIn != "" {
 		return jqlIn, nil
 	}
 	if assigneeIn != "" {
 		return DefaultJQLForAssignee(assigneeIn), nil
+	}
+	if o.Supervisor {
+		return DefaultJQLSupervisor, nil
 	}
 	return DefaultJQL, nil
 }
@@ -495,8 +510,8 @@ const (
 	ansiRedFG        = "\x1b[31m"
 	ansiReset        = "\x1b[0m"
 	ansiBold         = "\x1b[1m"
-	ansiWhiteOnRed   = "\x1b[97;41m"   // bright white on red background
-	ansiWhiteOnGreen = "\x1b[97;42m"   // bright white on green background (Done/Closed DIG)
+	ansiWhiteOnRed   = "\x1b[97;41m" // bright white on red background
+	ansiWhiteOnGreen = "\x1b[97;42m" // bright white on green background (Done/Closed DIG)
 )
 
 func printPaddedTable(w io.Writer, lines []dashTableLine, color bool, colSpecs []columnSpec) {
