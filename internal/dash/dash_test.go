@@ -1,6 +1,40 @@
 package dash
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/codcod/maints-triage/internal/jira"
+)
+
+func TestBuildRowsSkipDig(t *testing.T) {
+	hits := []jira.IssueJQL{{
+		Key: "MAINT-1",
+		Fields: map[string]any{
+			"summary": "x",
+			"issuelinks": []any{
+				map[string]any{
+					"type":         map[string]any{"name": "Solved by"},
+					"inwardIssue":  map[string]any{"key": "MAINT-1"},
+					"outwardIssue": map[string]any{"key": "DIG-1"},
+				},
+			},
+		},
+	}}
+	rowsWithDig, err := buildRows(hits, "DIG", "Solved by", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rowsWithDig) != 1 || len(rowsWithDig[0].DIGs) == 0 {
+		t.Fatalf("expected DIG sub-rows: %+v", rowsWithDig)
+	}
+	rowsNoDig, err := buildRows(hits, "DIG", "Solved by", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rowsNoDig) != 1 || len(rowsNoDig[0].DIGs) != 0 {
+		t.Fatalf("expected no DIGs: %+v", rowsNoDig)
+	}
+}
 
 func TestPickDIGEnd(t *testing.T) {
 	maint := "MAINT-1"

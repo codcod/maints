@@ -75,6 +75,8 @@ and check stderr.
   `--jql` and `--supervisor`.
 - `--supervisor`: Use the built-in MAINT-Flow JQL **without** limiting
   `assignee` (team overview). Mutually exclusive with `--jql` and `--assignee`.
+- `--no-dig`: Print only **MAINT** rows (no linked DIG sub-rows, no DIG detail
+  fetches, no per-MAINT issue-link reload). JQL and column flags behave as usual.
 - `--dig-project`: Project key for "DIG" work items (default `DIG`).
 - `--link-type`: Link type name in Jira (default from env or `Solved by`).
 - `--columns`: Comma‑separated column names (case‑insensitive; optional
@@ -89,6 +91,7 @@ and check stderr.
 
 ```bash
 maints dash
+maints dash --no-dig
 maints dash --assignee 'Name Surname'
 maints dash --supervisor
 maints dash --columns "key, priority, due"

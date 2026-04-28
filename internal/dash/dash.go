@@ -76,6 +76,8 @@ type Options struct {
 	Debug bool
 	// Columns is a comma-separated list of column names (e.g. key, priority, due). Empty means all default columns.
 	Columns string
+	// NoDig lists only MAINT rows: no linked DIG sub-rows and no per-DIG or per-issue-link fetches for the dashboard.
+	NoDig bool
 }
 
 // Run fetches Jira and prints a text dashboard to w; link diagnostics to errW when o.Debug.
@@ -92,15 +94,18 @@ func Run(ctx context.Context, client *jira.Client, w, errW io.Writer, o Options)
 	if lt == "" {
 		lt = dig.DefaultLinkType()
 	}
-	hits, err := client.JQLSearchWithFields(ctx, jql, []string{
+	searchFields := []string{
 		"summary",
 		"status",
 		"duedate",
 		"priority",
 		"assignee",
-		"issuelinks",
 		"fixVersions",
-	})
+	}
+	if !o.NoDig {
+		searchFields = append(searchFields, "issuelinks")
+	}
+	hits, err := client.JQLSearchWithFields(ctx, jql, searchFields)
 	if err != nil {
 		return err
 	}
@@ -108,39 +113,43 @@ func Run(ctx context.Context, client *jira.Client, w, errW io.Writer, o Options)
 		_, _ = fmt.Fprintln(w, "No issues matched the query.")
 		return nil
 	}
-	// POST /search/jql does not always return issuelinks on issue objects. Reload per issue
-	// (same as the Jira issue view) so "Solved by" DIG work appears on the dashboard.
-	if err := enrichIssueLinksFromIssueAPI(ctx, client, hits); err != nil {
-		return err
+	if !o.NoDig {
+		// POST /search/jql does not always return issuelinks on issue objects. Reload per issue
+		// (same as the Jira issue view) so "Solved by" DIG work appears on the dashboard.
+		if err := enrichIssueLinksFromIssueAPI(ctx, client, hits); err != nil {
+			return err
+		}
 	}
 	if o.Debug {
 		writeDebugLinks(errW, hits)
 	}
-	rows, err := buildRows(hits, digProj, lt)
+	rows, err := buildRows(hits, digProj, lt, o.NoDig)
 	if err != nil {
 		return err
 	}
-	// One GET per DIG for authoritative status, assignee, and summary (issuelink embed is often partial).
-	enriched, err := batchDigDetails(ctx, client, digKeysFromRows(rows))
-	if err != nil {
-		return err
-	}
-	for i := range rows {
-		for j := range rows[i].DIGs {
-			dk := rows[i].DIGs[j].Key
-			if d, ok := enriched[dk]; ok {
-				if d.status != "" {
-					rows[i].DIGs[j].Status = d.status
-				}
-				rows[i].DIGs[j].Assignee = d.assignee
-				if d.summary != "" {
-					rows[i].DIGs[j].Summary = d.summary
-				}
-				if d.fixVersion != "" {
-					rows[i].DIGs[j].FixVersion = d.fixVersion
-				}
-				if d.priority != "" {
-					rows[i].DIGs[j].Priority = d.priority
+	if !o.NoDig {
+		// One GET per DIG for authoritative status, assignee, and summary (issuelink embed is often partial).
+		enriched, err := batchDigDetails(ctx, client, digKeysFromRows(rows))
+		if err != nil {
+			return err
+		}
+		for i := range rows {
+			for j := range rows[i].DIGs {
+				dk := rows[i].DIGs[j].Key
+				if d, ok := enriched[dk]; ok {
+					if d.status != "" {
+						rows[i].DIGs[j].Status = d.status
+					}
+					rows[i].DIGs[j].Assignee = d.assignee
+					if d.summary != "" {
+						rows[i].DIGs[j].Summary = d.summary
+					}
+					if d.fixVersion != "" {
+						rows[i].DIGs[j].FixVersion = d.fixVersion
+					}
+					if d.priority != "" {
+						rows[i].DIGs[j].Priority = d.priority
+					}
 				}
 			}
 		}
@@ -327,7 +336,7 @@ func digKeysFromRows(rows []Row) []string {
 	return keys
 }
 
-func buildRows(hits []jira.IssueJQL, digProject, linkType string) ([]Row, error) {
+func buildRows(hits []jira.IssueJQL, digProject, linkType string, skipDig bool) ([]Row, error) {
 	var rows []Row
 	for _, h := range hits {
 		status := fieldName(h.Fields, "status", "name")
@@ -336,7 +345,10 @@ func buildRows(hits []jira.IssueJQL, digProject, linkType string) ([]Row, error)
 		if summary == "" {
 			summary = "—"
 		}
-		digs := digsSolvedBy(h.Key, h.Fields, linkType, digProject)
+		var digs []DigRow
+		if !skipDig {
+			digs = digsSolvedBy(h.Key, h.Fields, linkType, digProject)
+		}
 		prior := fieldName(h.Fields, "priority", "name")
 		asm := jira.AssigneeString(h.Fields["assignee"])
 		if strings.TrimSpace(asm) == "" {

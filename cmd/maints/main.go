@@ -89,6 +89,7 @@ func newDashCmd() *cobra.Command {
 		supervisor bool
 		columns    string
 		debug      bool
+		noDig      bool
 	)
 	cmd := &cobra.Command{
 		Use:   "dash",
@@ -102,8 +103,11 @@ assignee = the given string). Use --supervisor for the same built-in filter
 without an assignee restriction (overview across assignees). Do not combine
 --jql with --assignee or --supervisor.
 
+Use --no-dig to print only MAINT rows (no linked DIG lines or DIG API calls).
+
 Requires Jira credentials only (no cursor-agent).`,
 		Example: `  maints dash
+  maints dash --no-dig
   maints dash --assignee colleague@example.com
   maints dash --supervisor
   maints dash --columns "key, priority, due"
@@ -124,6 +128,7 @@ Requires Jira credentials only (no cursor-agent).`,
 				Supervisor: supervisor,
 				Columns:    columns,
 				Debug:      debug,
+				NoDig:      noDig,
 			})
 		},
 	}
@@ -134,6 +139,7 @@ Requires Jira credentials only (no cursor-agent).`,
 	cmd.Flags().StringVar(&linkType, "link-type", "", `issue link name to follow (default: $JIRA_LINK_TYPE or "Solved by")`)
 	cmd.Flags().StringVar(&columns, "columns", "", `comma-separated column names: key, priority, status, due, summary, scheduled, assignee (default: all, in that order; case-insensitive). Use summary[N] for a custom max width in runes (e.g. summary[20]); default is 50`)
 	cmd.Flags().BoolVar(&debug, "debug", false, "print each issue's issuelinks (type names, keys) to stderr")
+	cmd.Flags().BoolVar(&noDig, "no-dig", false, "print only MAINT rows (no linked DIG sub-rows or DIG fetches)")
 	return cmd
 }
 
