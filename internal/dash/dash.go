@@ -18,6 +18,10 @@ import (
 const DefaultJQL = `project = MAINT AND "Maint Component[Select List (cascading)]" IN cascadeOption(Flow) ` +
 	`AND status not in (Done, Closed) AND assignee=currentUser() ORDER BY priority, created asc`
 
+// DefaultJQLSupervisor is the same Flow filter as DefaultJQL but without limiting assignee (e.g. team overview).
+const DefaultJQLSupervisor = `project = MAINT AND "Maint Component[Select List (cascading)]" IN cascadeOption(Flow) ` +
+	`AND status not in (Done, Closed) ORDER BY assignee, priority, created asc`
+
 // DefaultJQLForAssignee is the same filter with assignee set to a specific Jira user (email, name, or account id string).
 // assigneeS must be safe for a J-quoted JQL value (see jiraAssigneeJQLString).
 func DefaultJQLForAssignee(assigneeS string) string {
@@ -66,10 +70,20 @@ type Options struct {
 	LinkType   string
 	// Assignee, when set, selects the default JQL for that assignee (use with the built-in query, not with --jql).
 	Assignee string
+	// Supervisor uses the built-in Flow JQL without an assignee filter (mutually exclusive with --jql and --assignee).
+	Supervisor bool
+	// SupervisorSummary, with Supervisor, prints the aggregate statistics block after the table.
+	SupervisorSummary bool
 	// Debug prints issuelink metadata to errW (link types, keys) for troubleshooting.
 	Debug bool
 	// Columns is a comma-separated list of column names (e.g. key, priority, due). Empty means all default columns.
 	Columns string
+	// NoDig lists only MAINT rows: no linked DIG sub-rows and no per-DIG or per-issue-link fetches for the dashboard.
+	NoDig bool
+	// StatusFilter is comma-separated allowed MAINT status names (trimmed, case-insensitive). Empty = no filter.
+	StatusFilter string
+	// PriorityFilter is comma-separated allowed MAINT priority names (trimmed, case-insensitive). Empty = no filter.
+	PriorityFilter string
 }
 
 // Run fetches Jira and prints a text dashboard to w; link diagnostics to errW when o.Debug.
@@ -86,15 +100,18 @@ func Run(ctx context.Context, client *jira.Client, w, errW io.Writer, o Options)
 	if lt == "" {
 		lt = dig.DefaultLinkType()
 	}
-	hits, err := client.JQLSearchWithFields(ctx, jql, []string{
+	searchFields := []string{
 		"summary",
 		"status",
 		"duedate",
 		"priority",
 		"assignee",
-		"issuelinks",
 		"fixVersions",
-	})
+	}
+	if !o.NoDig {
+		searchFields = append(searchFields, "issuelinks")
+	}
+	hits, err := client.JQLSearchWithFields(ctx, jql, searchFields)
 	if err != nil {
 		return err
 	}
@@ -102,48 +119,63 @@ func Run(ctx context.Context, client *jira.Client, w, errW io.Writer, o Options)
 		_, _ = fmt.Fprintln(w, "No issues matched the query.")
 		return nil
 	}
-	// POST /search/jql does not always return issuelinks on issue objects. Reload per issue
-	// (same as the Jira issue view) so "Solved by" DIG work appears on the dashboard.
-	if err := enrichIssueLinksFromIssueAPI(ctx, client, hits); err != nil {
-		return err
+	if !o.NoDig {
+		// POST /search/jql does not always return issuelinks on issue objects. Reload per issue
+		// (same as the Jira issue view) so "Solved by" DIG work appears on the dashboard.
+		if err := enrichIssueLinksFromIssueAPI(ctx, client, hits); err != nil {
+			return err
+		}
 	}
 	if o.Debug {
 		writeDebugLinks(errW, hits)
 	}
-	rows, err := buildRows(hits, digProj, lt)
+	rows, err := buildRows(hits, digProj, lt, o.NoDig)
 	if err != nil {
 		return err
 	}
-	// One GET per DIG for authoritative status, assignee, and summary (issuelink embed is often partial).
-	enriched, err := batchDigDetails(ctx, client, digKeysFromRows(rows))
-	if err != nil {
-		return err
-	}
-	for i := range rows {
-		for j := range rows[i].DIGs {
-			dk := rows[i].DIGs[j].Key
-			if d, ok := enriched[dk]; ok {
-				if d.status != "" {
-					rows[i].DIGs[j].Status = d.status
-				}
-				rows[i].DIGs[j].Assignee = d.assignee
-				if d.summary != "" {
-					rows[i].DIGs[j].Summary = d.summary
-				}
-				if d.fixVersion != "" {
-					rows[i].DIGs[j].FixVersion = d.fixVersion
-				}
-				if d.priority != "" {
-					rows[i].DIGs[j].Priority = d.priority
+	if !o.NoDig {
+		// One GET per DIG for authoritative status, assignee, and summary (issuelink embed is often partial).
+		enriched, err := batchDigDetails(ctx, client, digKeysFromRows(rows))
+		if err != nil {
+			return err
+		}
+		for i := range rows {
+			for j := range rows[i].DIGs {
+				dk := rows[i].DIGs[j].Key
+				if d, ok := enriched[dk]; ok {
+					if d.status != "" {
+						rows[i].DIGs[j].Status = d.status
+					}
+					rows[i].DIGs[j].Assignee = d.assignee
+					if d.summary != "" {
+						rows[i].DIGs[j].Summary = d.summary
+					}
+					if d.fixVersion != "" {
+						rows[i].DIGs[j].FixVersion = d.fixVersion
+					}
+					if d.priority != "" {
+						rows[i].DIGs[j].Priority = d.priority
+					}
 				}
 			}
 		}
+	}
+	statusAllow := splitCommaList(o.StatusFilter)
+	priorityAllow := splitCommaList(o.PriorityFilter)
+	nBefore := len(rows)
+	rows = filterMaintRows(rows, statusAllow, priorityAllow)
+	if len(rows) == 0 && nBefore > 0 && (len(statusAllow) > 0 || len(priorityAllow) > 0) {
+		_, _ = fmt.Fprintln(w, "No MAINT rows match --status/--priority filters.")
+		return nil
 	}
 	colSpecs, err := parseDashColumns(o.Columns)
 	if err != nil {
 		return err
 	}
 	printDashboard(w, rows, useColor(), colSpecs)
+	if o.Supervisor && o.SupervisorSummary {
+		printSupervisorSummary(w, rows, useColor())
+	}
 	return nil
 }
 
@@ -152,18 +184,27 @@ func useColor() bool {
 	return os.Getenv("NO_COLOR") == ""
 }
 
-// effectiveDashJQL resolves --jql, --assignee, and the default query (mutually exclusive: --jql vs --assignee).
+// effectiveDashJQL resolves --jql, --assignee, --supervisor, and the default query.
 func effectiveDashJQL(o Options) (string, error) {
 	jqlIn := strings.TrimSpace(o.JQL)
 	assigneeIn := strings.TrimSpace(o.Assignee)
 	if jqlIn != "" && assigneeIn != "" {
 		return "", fmt.Errorf("use either --jql or --assignee, not both")
 	}
+	if o.Supervisor && jqlIn != "" {
+		return "", fmt.Errorf("use either --jql or --supervisor, not both")
+	}
+	if o.Supervisor && assigneeIn != "" {
+		return "", fmt.Errorf("use either --assignee or --supervisor, not both")
+	}
 	if jqlIn != "" {
 		return jqlIn, nil
 	}
 	if assigneeIn != "" {
 		return DefaultJQLForAssignee(assigneeIn), nil
+	}
+	if o.Supervisor {
+		return DefaultJQLSupervisor, nil
 	}
 	return DefaultJQL, nil
 }
@@ -312,7 +353,7 @@ func digKeysFromRows(rows []Row) []string {
 	return keys
 }
 
-func buildRows(hits []jira.IssueJQL, digProject, linkType string) ([]Row, error) {
+func buildRows(hits []jira.IssueJQL, digProject, linkType string, skipDig bool) ([]Row, error) {
 	var rows []Row
 	for _, h := range hits {
 		status := fieldName(h.Fields, "status", "name")
@@ -321,7 +362,10 @@ func buildRows(hits []jira.IssueJQL, digProject, linkType string) ([]Row, error)
 		if summary == "" {
 			summary = "—"
 		}
-		digs := digsSolvedBy(h.Key, h.Fields, linkType, digProject)
+		var digs []DigRow
+		if !skipDig {
+			digs = digsSolvedBy(h.Key, h.Fields, linkType, digProject)
+		}
 		prior := fieldName(h.Fields, "priority", "name")
 		asm := jira.AssigneeString(h.Fields["assignee"])
 		if strings.TrimSpace(asm) == "" {
@@ -495,8 +539,8 @@ const (
 	ansiRedFG        = "\x1b[31m"
 	ansiReset        = "\x1b[0m"
 	ansiBold         = "\x1b[1m"
-	ansiWhiteOnRed   = "\x1b[97;41m"   // bright white on red background
-	ansiWhiteOnGreen = "\x1b[97;42m"   // bright white on green background (Done/Closed DIG)
+	ansiWhiteOnRed   = "\x1b[97;41m" // bright white on red background
+	ansiWhiteOnGreen = "\x1b[97;42m" // bright white on green background (Done/Closed DIG)
 )
 
 func printPaddedTable(w io.Writer, lines []dashTableLine, color bool, colSpecs []columnSpec) {
@@ -546,9 +590,9 @@ func formatDigSettledRow(cells []string, colSpecs []columnSpec, widths []int, ga
 }
 
 // formatMaintsRowColored is a red-foreground line for a MAINT row, with selected
-// cells in white on red: STATUS for Open / AWAITING INPUT / TRIAGE, and DUE when
-// the date is strictly before local today. Column position follows colSpecs.
-// Only use when the outer table run has color (NO_COLOR is unset).
+// cells in white on red: STATUS for Open / AWAITING INPUT / TRIAGE; PRIORITY for
+// Blocker / Critical; DUE when the date is strictly before local today. Column
+// position follows colSpecs. Only use when the outer table run has color (NO_COLOR is unset).
 func formatMaintsRowColored(cells []string, colSpecs []columnSpec, widths []int, gap string) string {
 	var b strings.Builder
 	b.WriteString(ansiRedFG)
@@ -558,7 +602,9 @@ func formatMaintsRowColored(cells []string, colSpecs []columnSpec, widths []int,
 		}
 		pad := padCellToRunes(cells[i], widths[i])
 		k := colSpecs[i].id
-		highlight := (k == "status" && isMaintUrgentStatus(cells[i])) || (k == "due" && isPastDueCell(cells[i]))
+		highlight := (k == "status" && isMaintUrgentStatus(cells[i])) ||
+			(k == "priority" && isMaintCriticalPriority(cells[i])) ||
+			(k == "due" && isPastDueCell(cells[i]))
 		if highlight {
 			b.WriteString(ansiReset)
 			b.WriteString(ansiWhiteOnRed)
@@ -589,6 +635,12 @@ func isMaintUrgentStatus(s string) bool {
 	default:
 		return false
 	}
+}
+
+// isMaintCriticalPriority is true when the MAINT PRIORITY cell should read as Blocker or Critical in the dash.
+func isMaintCriticalPriority(s string) bool {
+	s = strings.TrimSpace(s)
+	return strings.EqualFold(s, "Blocker") || strings.EqualFold(s, "Critical")
 }
 
 // isPastDueCell is true for a YYYY-MM-dd (or datetime prefix) in the DUE cell strictly before start of local today.

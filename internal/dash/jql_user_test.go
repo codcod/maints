@@ -34,6 +34,19 @@ func TestIsMaintUrgentStatus(t *testing.T) {
 	}
 }
 
+func TestIsMaintCriticalPriority(t *testing.T) {
+	for _, s := range []string{"Blocker", " blocker ", "Critical", "CRITICAL"} {
+		if !isMaintCriticalPriority(s) {
+			t.Fatalf("expected critical priority: %q", s)
+		}
+	}
+	for _, s := range []string{"", "Major", "Minor", "Open"} {
+		if isMaintCriticalPriority(s) {
+			t.Fatalf("expected not critical priority: %q", s)
+		}
+	}
+}
+
 func TestIsPastDueCell(t *testing.T) {
 	if isPastDueCell("—") {
 		t.Fatal("placeholder")
@@ -55,5 +68,17 @@ func TestEffectiveDashJQL(t *testing.T) {
 	_, err = effectiveDashJQL(Options{JQL: "a", Assignee: "b"})
 	if err == nil || !strings.Contains(err.Error(), "either --jql or --assignee") {
 		t.Fatalf("expected mutual exclusion: %v", err)
+	}
+	j, err = effectiveDashJQL(Options{Supervisor: true})
+	if err != nil || j != DefaultJQLSupervisor {
+		t.Fatalf("supervisor: %q %v", j, err)
+	}
+	_, err = effectiveDashJQL(Options{JQL: "x", Supervisor: true})
+	if err == nil || !strings.Contains(err.Error(), "either --jql or --supervisor") {
+		t.Fatalf("expected jql+supervisor exclusion: %v", err)
+	}
+	_, err = effectiveDashJQL(Options{Assignee: "u@x.com", Supervisor: true})
+	if err == nil || !strings.Contains(err.Error(), "either --assignee or --supervisor") {
+		t.Fatalf("expected assignee+supervisor exclusion: %v", err)
 	}
 }
